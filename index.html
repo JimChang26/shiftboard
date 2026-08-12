@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>排班台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E7ECEF;
+    --paper-2:#FFFFFF;
+    --ink:#15212B;
+    --accent:#0E6F6C;
+    --alert:#C63A28;
+    --line:rgba(21,33,43,.16);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:var(--paper); color:var(--ink); }
+  body{ font-family:'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif; line-height:1.5; }
+  button,input,select,textarea{ font-family:inherit; }
+  h1,h2{ font-family:'Archivo','Noto Sans TC',sans-serif; margin:0 0 .3em; }
+  .mono{ font-family:'Roboto Mono',monospace; }
+  a{ color:var(--accent); }
+
+  header{ padding:1.2rem 1rem .6rem; }
+  header h1{ font-size:1.5rem; }
+  header p{ margin:.2em 0 0; opacity:.75; font-size:.92rem; }
+
+  main{ max-width:1200px; margin:0 auto; padding:0 1rem 3rem; }
+
+  .card{ background:var(--paper-2); border:1px solid var(--line); border-radius:10px; padding:1rem; margin-bottom:1rem; }
+  .card h2{ font-size:1.02rem; margin-bottom:.6em; }
+  .basicFields{ display:flex; flex-wrap:wrap; gap:1rem 1.5rem; }
+  .basicFields label{ display:flex; flex-direction:column; gap:.3em; font-size:.85rem; }
+  .basicFields input{ padding:.4em .5em; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); width:9em; }
+
+  .settingsTable{ width:100%; border-collapse:collapse; }
+  .settingsTable th{ text-align:left; font-size:.8rem; opacity:.7; font-weight:600; padding:.3em; border-bottom:1px solid var(--line); }
+  .settingsTable td{ padding:.3em; border-bottom:1px solid var(--line); vertical-align:middle; }
+  .settingsTable input[type=text],.settingsTable input[type=number],.settingsTable input[type=time]{
+    width:100%; min-width:64px; padding:.35em .4em; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink);
+  }
+  .settingsTable input[type=color]{ width:2.4em; height:2em; padding:0; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .settingsWrap{ overflow-x:auto; }
+  .skills label{ display:inline-flex; align-items:center; gap:.2em; margin:0 .6em .2em 0; font-size:.82rem; white-space:nowrap; }
+  .rowActions{ margin-top:.6em; }
+
+  .btn{ background:var(--accent); color:#fff; border:none; padding:.55em 1.1em; border-radius:7px; font-weight:600; cursor:pointer; font-size:.92rem; }
+  .btn.secondary{ background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  .btn.danger{ background:transparent; color:var(--alert); border:1px solid var(--alert); }
+  .btn.small{ padding:.3em .7em; font-size:.8rem; }
+  .btn:hover{ filter:brightness(.95); }
+
+  #actions{ display:flex; flex-wrap:wrap; gap:.6em; align-items:center; margin:1rem 0; }
+  #status{ min-height:1.4em; font-size:.85rem; color:var(--accent); font-weight:600; }
+
+  #legend{ display:flex; flex-wrap:wrap; gap:.4em 1.2em; margin:.7em 0; font-size:.85rem; }
+  .legend-item{ display:inline-flex; align-items:center; }
+  .swatch{ width:.85em; height:.85em; border-radius:3px; display:inline-block; margin-right:.4em; }
+  .legend-note{ opacity:.65; }
+
+  .tablewrap{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--paper-2); }
+  table.sched{ border-collapse:collapse; min-width:100%; }
+  table.sched th, table.sched td{ border:1px solid var(--line); padding:.3em .4em; text-align:center; white-space:nowrap; }
+  table.sched thead th{ position:sticky; top:0; background:var(--paper-2); z-index:3; }
+  table.sched th.staffcol, table.sched td.staffcol{ position:sticky; left:0; background:var(--paper-2); z-index:2; text-align:left; min-width:104px; }
+  table.sched thead th.staffcol{ z-index:4; }
+  th.wk-weekend{ background:rgba(14,111,108,.08); }
+  .dnum{ font-family:'Roboto Mono',monospace; font-weight:600; font-size:.85em; }
+  .dwk{ font-size:.68em; opacity:.65; }
+
+  td.cell{ min-width:52px; cursor:pointer; position:relative; }
+  td.cell:empty:not(.off)::before{ content:'·'; opacity:.3; }
+  td.cell.off{ background-image:repeating-linear-gradient(45deg, rgba(21,33,43,.09) 0 4px, transparent 4px 9px); }
+  td.cell.bad{ box-shadow:inset 0 0 0 2px var(--alert); }
+  td.cell.locked::after{ content:''; position:absolute; top:2px; right:2px; width:5px; height:5px; border-radius:50%; background:var(--ink); opacity:.5; }
+  .chip{ display:inline-block; min-width:1.6em; padding:.12em .45em; border-radius:5px; color:#fff; font-weight:700; font-family:'Roboto Mono',monospace; font-size:.85em; text-shadow:0 1px 1px rgba(0,0,0,.35); }
+
+  tr.covrow th, tr.covrow td{ background:var(--paper); }
+  tr.covrow th.staffcol{ background:var(--paper); }
+  .covcell{ padding:.25em .3em !important; }
+  .covcell .badge{ display:block; font-family:'Roboto Mono',monospace; font-size:.62rem; line-height:1.35; }
+  .covcell .badge.short{ color:var(--alert); font-weight:700; }
+
+  #audit{ margin-top:.8em; }
+  #audit .issue{ padding:.35em .6em; border-left:3px solid var(--alert); margin-bottom:.35em; font-size:.86rem; background:var(--paper-2); border-radius:0 6px 6px 0; }
+  #audit .ok{ color:var(--accent); font-weight:600; }
+
+  button:focus-visible, input:focus-visible, td.cell:focus-visible{
+    outline:2px solid var(--accent); outline-offset:2px;
+  }
+
+  @media (max-width:480px){
+    header{ padding:1rem .8rem .5rem; }
+    main{ padding:0 .8rem 2.5rem; }
+    .card{ padding:.75rem; }
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{ transition:none !important; animation:none !important; scroll-behavior:auto !important; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>排班台</h1>
+  <p>填好班別、人員與規則後，按「自動排班」一鍵產生班表。點格子可手動調整，調整過的格子會自動鎖定，不會被自動排班改動。</p>
+</header>
+
+<main>
+  <section id="settings">
+    <div class="card" id="basicCard">
+      <h2>基本設定</h2>
+      <div class="basicFields">
+        <label>起始日期 <input type="date" id="inpStart"></label>
+        <label>天數 <input type="number" id="inpDays" min="1" max="180"></label>
+        <label>最短班間休息（小時） <input type="number" id="inpMinRest" min="0" max="48"></label>
+      </div>
+    </div>
+
+    <div class="card" id="shiftsCard">
+      <h2>班別設定</h2>
+      <div class="settingsWrap">
+        <table class="settingsTable">
+          <thead><tr><th>代號</th><th>名稱</th><th>開始</th><th>結束</th><th>需求人數</th><th>顏色</th><th></th></tr></thead>
+          <tbody id="shiftsBody"></tbody>
+        </table>
+      </div>
+      <div class="rowActions"><button type="button" class="btn secondary small" id="btnAddShift">新增班別</button></div>
+    </div>
+
+    <div class="card" id="staffCard">
+      <h2>人員設定</h2>
+      <div class="settingsWrap">
+        <table class="settingsTable">
+          <thead><tr><th>姓名</th><th>可排班別</th><th>每週上限（天）</th><th>不可排日期</th><th></th></tr></thead>
+          <tbody id="staffBody"></tbody>
+        </table>
+      </div>
+      <div class="rowActions"><button type="button" class="btn secondary small" id="btnAddStaff">新增人員</button></div>
+    </div>
+  </section>
+
+  <section id="actions">
+    <button type="button" class="btn" id="btnSolve">自動排班</button>
+    <button type="button" class="btn secondary" id="btnClearLock">清空手動鎖定</button>
+    <button type="button" class="btn secondary" id="btnSaveJson">下載設定</button>
+    <button type="button" class="btn secondary" id="btnLoadJson">載入設定</button>
+    <input type="file" id="fileLoad" accept="application/json" hidden>
+    <button type="button" class="btn secondary" id="btnCsv">匯出 CSV</button>
+    <span id="status" role="status" aria-live="polite"></span>
+  </section>
+
+  <section id="schedule">
+    <div id="legend"></div>
+    <div class="tablewrap">
+      <table class="sched" id="schedTable"></table>
+    </div>
+    <div id="audit" aria-live="polite"></div>
+  </section>
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  function $(sel){ return document.querySelector(sel); }
+  function esc(s){
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  let _idc = 0;
+  function nid(){ return 'i' + (_idc++); }
+  function K(d, staffId){ return d + '|' + staffId; }
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function toMin(t){ const [h,m] = t.split(':').map(Number); return h*60+m; }
+  function toISO(dt){ return dt.getFullYear()+'-'+pad2(dt.getMonth()+1)+'-'+pad2(dt.getDate()); }
+  function addDays(iso, n){
+    const [y,m,d] = iso.split('-').map(Number);
+    const dt = new Date(y, m-1, d);
+    dt.setDate(dt.getDate()+n);
+    return toISO(dt);
+  }
+  function mondayOf(iso){
+    const [y,m,d] = iso.split('-').map(Number);
+    const dt = new Date(y, m-1, d);
+    const day = dt.getDay();
+    const diff = day===0 ? -6 : 1-day;
+    dt.setDate(dt.getDate()+diff);
+    return toISO(dt);
+  }
+  function dLabel(iso){
+    const [y,m,d] = iso.split('-').map(Number);
+    const dt = new Date(y, m-1, d);
+    const wk = '日一二三四五六'[dt.getDay()];
+    return `${m}/${d}（${wk}）`;
+  }
+  function offDays(p){
+    if(!p.off) return [];
+    return p.off.split(',').map(s=>s.trim()).filter(Boolean).map(tok=>{
+      if(/^\d{4}-\d{2}-\d{2}$/.test(tok)) return tok;
+      if(/^\d{2}-\d{2}$/.test(tok)) return S.start.slice(0,4) + '-' + tok;
+      return null;
+    }).filter(Boolean);
+  }
+  function shiftAbs(dayIdx, shift){
+    const s = dayIdx*1440 + toMin(shift.start);
+    let e = dayIdx*1440 + toMin(shift.end);
+    if(e<=s) e += 1440;
+    return [s,e];
+  }
+
+  // ---- 狀態 ----
+  const seedShifts = [
+    {id:nid(), code:'早', name:'早班', start:'08:00', end:'16:00', need:2, color:'#E8A317'},
+    {id:nid(), code:'中', name:'中班', start:'12:00', end:'20:00', need:2, color:'#3E7CB1'},
+    {id:nid(), code:'晚', name:'晚班', start:'20:00', end:'04:00', need:1, color:'#463C86'}
+  ];
+  const seedStaff = ['王小明','陳雅婷','林俊傑','李佳穎','張家豪','黃詩涵','吳承恩','蔡明哲'].map(name => ({
+    id:nid(), name, skills:seedShifts.map(s=>s.id), maxWeek:5, off:''
+  }));
+  const S = {
+    start:'2026-08-12', days:14, minRest:11,
+    shifts:seedShifts, staff:seedStaff,
+    assign:{}, locked:{}
+  };
+
+  // ---- 規則 ----
+  function check(p, dayIdx, shiftId, assign){
+    const reasons = [];
+    const shift = S.shifts.find(s=>s.id===shiftId);
+    if(!shift) return reasons;
+
+    if(!p.skills.includes(shiftId)) reasons.push('不具備此班別技能');
+
+    const date = addDays(S.start, dayIdx);
+    if(offDays(p).includes(date)) reasons.push('當日為不可排日期');
+
+    const existing = assign[K(dayIdx, p.id)];
+    if(existing && existing!==shiftId) reasons.push('當日已排其他班別');
+
+    const wkStart = mondayOf(date);
+    let weekCount = 0;
+    for(let d=0; d<S.days; d++){
+      if(d===dayIdx) continue;
+      const dt = addDays(S.start, d);
+      if(mondayOf(dt) !== wkStart) continue;
+      if(assign[K(d, p.id)]) weekCount++;
+    }
+    if(weekCount+1 > p.maxWeek) reasons.push('超過每週上限天數');
+
+    const iv = shiftAbs(dayIdx, shift);
+    const ivs = [iv];
+    for(const dd of [dayIdx-1, dayIdx+1]){
+      if(dd<0 || dd>=S.days) continue;
+      const sid2 = assign[K(dd, p.id)];
+      if(!sid2) continue;
+      const sh2 = S.shifts.find(s=>s.id===sid2);
+      if(!sh2) continue;
+      ivs.push(shiftAbs(dd, sh2));
+    }
+    ivs.sort((a,b)=>a[0]-b[0]);
+    for(let i=0; i<ivs.length-1; i++){
+      const gap = ivs[i+1][0] - ivs[i][1];
+      if(gap < 0){
+        if(!reasons.includes('班次時間重疊')) reasons.push('班次時間重疊');
+      } else if(gap < S.minRest*60){
+        const t = `休息時數不足（需 ${S.minRest} 小時）`;
+        if(!reasons.includes(t)) reasons.push(t);
+      }
+    }
+    return reasons;
+  }
+
+  function cands(sh, d, A){
+    return S.staff.filter(p => check(p, d, sh.id, A).length===0);
+  }
+
+  function solve(){
+    const assign = {};
+    for(const k in S.locked){
+      if(S.locked[k] && S.assign[k]) assign[k] = S.assign[k];
+    }
+    const counts = {};
+    S.staff.forEach(p => counts[p.id]=0);
+    for(const k in assign){
+      const staffId = k.split('|')[1];
+      counts[staffId] = (counts[staffId]||0) + 1;
+    }
+
+    for(let d=0; d<S.days; d++){
+      const filled = {};
+      S.shifts.forEach(sh => filled[sh.id]=0);
+      S.staff.forEach(p=>{
+        const sid = assign[K(d,p.id)];
+        if(sid) filled[sid] = (filled[sid]||0)+1;
+      });
+
+      const order = S.shifts.slice().sort((a,b) => cands(a,d,assign).length - cands(b,d,assign).length);
+      for(const sh of order){
+        let need = sh.need - (filled[sh.id]||0);
+        if(need<=0) continue;
+        let pool = cands(sh, d, assign);
+        pool = pool.map(p=>({p, c:counts[p.id], r:Math.random()}))
+                   .sort((a,b)=> a.c-b.c || a.r-b.r)
+                   .map(x=>x.p);
+        for(let i=0; i<pool.length && need>0; i++, need--){
+          const p = pool[i];
+          assign[K(d,p.id)] = sh.id;
+          counts[p.id]++;
+        }
+      }
+    }
+
+    for(let round=0; round<600; round++){
+      let maxP=null, minP=null;
+      for(const p of S.staff){
+        if(!maxP || counts[p.id] > counts[maxP.id]) maxP = p;
+        if(!minP || counts[p.id] < counts[minP.id]) minP = p;
+      }
+      if(!maxP || !minP || counts[maxP.id]-counts[minP.id] <= 1) break;
+
+      let moved = false;
+      for(let d=0; d<S.days; d++){
+        const kMax = K(d, maxP.id);
+        const kMin = K(d, minP.id);
+        if(S.locked[kMax]) continue;
+        const sid = assign[kMax];
+        if(!sid) continue;
+        if(assign[kMin]) continue;
+        const temp = Object.assign({}, assign);
+        delete temp[kMax];
+        if(check(minP, d, sid, temp).length===0){
+          delete assign[kMax];
+          assign[kMin] = sid;
+          counts[maxP.id]--;
+          counts[minP.id]++;
+          moved = true;
+          break;
+        }
+      }
+      if(!moved) break;
+    }
+
+    S.assign = assign;
+  }
+
+  function audit(){
+    const list = [];
+    for(const k in S.assign){
+      const [dStr, staffId] = k.split('|');
+      const d = Number(dStr);
+      const p = S.staff.find(s=>s.id===staffId);
+      const shiftId = S.assign[k];
+      if(!p) continue;
+      const temp = Object.assign({}, S.assign);
+      delete temp[k];
+      const reasons = check(p, d, shiftId, temp);
+      if(reasons.length) list.push({type:'violation', day:d, staffId, shiftId, reasons});
+    }
+    for(let d=0; d<S.days; d++){
+      for(const sh of S.shifts){
+        let filled = 0;
+        S.staff.forEach(p=>{ if(S.assign[K(d,p.id)]===sh.id) filled++; });
+        if(filled < sh.need) list.push({type:'shortage', day:d, shiftId:sh.id, filled, need:sh.need});
+      }
+    }
+    return { bad: list.filter(x=>x.type==='violation').length, list };
+  }
+
+  // ---- 畫面 ----
+  function render(){
+    renderSettings();
+    renderSched();
+  }
+
+  function renderSettings(){
+    $('#inpStart').value = S.start;
+    $('#inpDays').value = S.days;
+    $('#inpMinRest').value = S.minRest;
+
+    $('#shiftsBody').innerHTML = S.shifts.map(sh => `
+      <tr data-id="${esc(sh.id)}">
+        <td><input type="text" data-field="code" value="${esc(sh.code)}" maxlength="4"></td>
+        <td><input type="text" data-field="name" value="${esc(sh.name)}"></td>
+        <td><input type="time" data-field="start" value="${esc(sh.start)}"></td>
+        <td><input type="time" data-field="end" value="${esc(sh.end)}"></td>
+        <td><input type="number" min="0" data-field="need" value="${esc(sh.need)}"></td>
+        <td><input type="color" data-field="color" value="${esc(sh.color)}"></td>
+        <td><button type="button" class="btn danger small" data-action="delShift">刪除</button></td>
+      </tr>`).join('');
+
+    $('#staffBody').innerHTML = S.staff.map(p => `
+      <tr data-id="${esc(p.id)}">
+        <td><input type="text" data-field="name" value="${esc(p.name)}"></td>
+        <td class="skills">${S.shifts.map(sh => `<label><input type="checkbox" data-field="skill" data-shift="${esc(sh.id)}" ${p.skills.includes(sh.id)?'checked':''}> ${esc(sh.code)}</label>`).join('')}</td>
+        <td><input type="number" min="0" data-field="maxWeek" value="${esc(p.maxWeek)}"></td>
+        <td><input type="text" data-field="off" value="${esc(p.off||'')}" placeholder="例如：08-20, 08-21"></td>
+        <td><button type="button" class="btn danger small" data-action="delStaff">刪除</button></td>
+      </tr>`).join('');
+  }
+
+  function renderSched(){
+    const auditResult = audit();
+    const badSet = new Set(auditResult.list.filter(x=>x.type==='violation').map(x=>K(x.day, x.staffId)));
+    const dates = Array.from({length:S.days}, (_,d) => addDays(S.start, d));
+
+    const theadRow1 = '<tr><th class="staffcol">人員</th>' + dates.map(iso => {
+      const [y,m,d] = iso.split('-').map(Number);
+      const dt = new Date(y, m-1, d);
+      const wk = '日一二三四五六'[dt.getDay()];
+      const weekend = dt.getDay()===0 || dt.getDay()===6;
+      return `<th class="${weekend?'wk-weekend':''}"><div class="dnum">${m}/${d}</div><div class="dwk">${wk}</div></th>`;
+    }).join('') + '</tr>';
+
+    const covRow = '<tr class="covrow"><th class="staffcol">覆蓋率</th>' + dates.map((iso,d) => {
+      const badges = S.shifts.map(sh => {
+        let filled=0;
+        S.staff.forEach(p=>{ if(S.assign[K(d,p.id)]===sh.id) filled++; });
+        const short = filled < sh.need;
+        return `<span class="badge${short?' short':''}" style="${short?'':'color:'+esc(sh.color)}">${esc(sh.code)} ${filled}/${sh.need}</span>`;
+      }).join('');
+      return `<td class="covcell">${badges}</td>`;
+    }).join('') + '</tr>';
+
+    const bodyRows = S.staff.map(p => {
+      const offList = offDays(p);
+      const cells = dates.map((iso,d) => {
+        const k = K(d, p.id);
+        const sid = S.assign[k];
+        const sh = sid ? S.shifts.find(s=>s.id===sid) : null;
+        const isOff = offList.includes(iso);
+        const isBad = badSet.has(k);
+        const isLocked = !!S.locked[k];
+        const cls = ['cell'];
+        if(isOff) cls.push('off');
+        if(isBad) cls.push('bad');
+        if(isLocked) cls.push('locked');
+        const label = `${dLabel(iso)} ${p.name}：${sh ? sh.name : '未排班'}`;
+        const content = sh ? `<span class="chip" style="background:${esc(sh.color)}">${esc(sh.code)}</span>` : '';
+        return `<td class="${cls.join(' ')}" tabindex="0" role="button" aria-label="${esc(label)}" data-k="${esc(k)}">${content}</td>`;
+      }).join('');
+      return `<tr><th class="staffcol">${esc(p.name)}</th>${cells}</tr>`;
+    }).join('');
+
+    $('#schedTable').innerHTML = `<thead>${theadRow1}${covRow}</thead><tbody>${bodyRows}</tbody>`;
+
+    $('#legend').innerHTML = S.shifts.map(sh =>
+      `<span class="legend-item"><span class="swatch" style="background:${esc(sh.color)}"></span>${esc(sh.code)} ${esc(sh.name)}（${esc(sh.start)}–${esc(sh.end)}）</span>`
+    ).join('') + `<span class="legend-item legend-note">斜線＝不可排日期　紅框＝排班問題　●＝手動鎖定</span>`;
+
+    if(auditResult.list.length===0){
+      $('#audit').innerHTML = '<p class="ok">目前沒有排班問題。</p>';
+    } else {
+      $('#audit').innerHTML = auditResult.list.slice().sort((a,b)=>a.day-b.day).map(item => {
+        if(item.type==='violation'){
+          const p = S.staff.find(s=>s.id===item.staffId);
+          const sh = S.shifts.find(s=>s.id===item.shiftId);
+          return `<div class="issue">${dLabel(dates[item.day])} ${esc(p?p.name:'')}：${esc(sh?sh.name:'')} — ${item.reasons.map(esc).join('、')}</div>`;
+        }
+        const sh = S.shifts.find(s=>s.id===item.shiftId);
+        return `<div class="issue">${dLabel(dates[item.day])} ${esc(sh?sh.name:'')} 人力不足（${item.filled}/${item.need}）</div>`;
+      }).join('');
+    }
+  }
+
+  function cycle(k){
+    const cur = S.assign[k];
+    const ids = S.shifts.map(s=>s.id);
+    const idx = cur==null ? -1 : ids.indexOf(cur);
+    const nextIdx = idx + 1;
+    if(nextIdx >= ids.length){
+      delete S.assign[k];
+      delete S.locked[k];
+    } else {
+      S.assign[k] = ids[nextIdx];
+      S.locked[k] = true;
+    }
+    renderSched();
+  }
+
+  function setStatus(msg){ $('#status').textContent = msg; }
+
+  // ---- 匯出入 ----
+  function downloadBlob(content, type, filename){
+    const blob = new Blob([content], {type});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  function csvCell(v){
+    v = String(v ?? '');
+    if(/[",\r\n]/.test(v)) v = '"' + v.replace(/"/g,'""') + '"';
+    return v;
+  }
+  function exportCSV(){
+    const dates = Array.from({length:S.days}, (_,d) => addDays(S.start, d));
+    const header = ['人員', ...dates.map(dLabel)];
+    const rows = [header];
+    S.staff.forEach(p => {
+      const row = [p.name];
+      dates.forEach((iso,d) => {
+        const sid = S.assign[K(d,p.id)];
+        const sh = sid ? S.shifts.find(s=>s.id===sid) : null;
+        row.push(sh ? sh.code : '');
+      });
+      rows.push(row);
+    });
+    const csv = rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+    downloadBlob('﻿'+csv, 'text/csv;charset=utf-8', `班表_${S.start}.csv`);
+  }
+  function saveJSON(){
+    downloadBlob(JSON.stringify(S, null, 2), 'application/json', `排班設定_${S.start}.json`);
+  }
+  function loadSettings(obj){
+    S.start = /^\d{4}-\d{2}-\d{2}$/.test(obj.start) ? obj.start : S.start;
+    S.days = Number.isFinite(obj.days) && obj.days>0 ? obj.days : S.days;
+    S.minRest = Number.isFinite(obj.minRest) ? obj.minRest : S.minRest;
+    S.shifts = Array.isArray(obj.shifts) ? obj.shifts.map(sh => ({
+      id: sh.id || nid(), code: sh.code || '', name: sh.name || '',
+      start: sh.start || '08:00', end: sh.end || '16:00',
+      need: Number.isFinite(sh.need) ? sh.need : 0, color: sh.color || '#888888'
+    })) : S.shifts;
+    S.staff = Array.isArray(obj.staff) ? obj.staff.map(p => ({
+      id: p.id || nid(), name: p.name || '',
+      skills: Array.isArray(p.skills) ? p.skills : [],
+      maxWeek: Number.isFinite(p.maxWeek) ? p.maxWeek : 5,
+      off: p.off || ''
+    })) : S.staff;
+    S.assign = (obj.assign && typeof obj.assign==='object') ? obj.assign : {};
+    S.locked = (obj.locked && typeof obj.locked==='object') ? obj.locked : {};
+    render();
+  }
+
+  // ---- 事件綁定 ----
+  document.getElementById('schedTable').addEventListener('click', e => {
+    const td = e.target.closest('td.cell');
+    if(td) cycle(td.dataset.k);
+  });
+  document.getElementById('schedTable').addEventListener('keydown', e => {
+    const td = e.target.closest('td.cell');
+    if(td && (e.key===' ' || e.key==='Enter')){ e.preventDefault(); cycle(td.dataset.k); }
+  });
+
+  document.getElementById('inpStart').addEventListener('change', e => {
+    if(/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)){ S.start = e.target.value; renderSched(); }
+  });
+  document.getElementById('inpDays').addEventListener('change', e => {
+    let n = parseInt(e.target.value, 10) || 1;
+    n = Math.max(1, Math.min(180, n));
+    S.days = n; e.target.value = n;
+    Object.keys(S.assign).forEach(k => {
+      if(Number(k.split('|')[0]) >= n){ delete S.assign[k]; delete S.locked[k]; }
+    });
+    renderSched();
+  });
+  document.getElementById('inpMinRest').addEventListener('change', e => {
+    S.minRest = Math.max(0, parseInt(e.target.value,10) || 0);
+    renderSched();
+  });
+
+  document.getElementById('shiftsCard').addEventListener('input', e => {
+    const tr = e.target.closest('tr[data-id]'); if(!tr) return;
+    const sh = S.shifts.find(s=>s.id===tr.dataset.id); if(!sh) return;
+    const f = e.target.dataset.field; if(!f) return;
+    if(f==='need') sh.need = Math.max(0, parseInt(e.target.value,10) || 0);
+    else sh[f] = e.target.value;
+    renderSched();
+  });
+  document.getElementById('shiftsCard').addEventListener('click', e => {
+    if(e.target.dataset.action==='delShift'){
+      const tr = e.target.closest('tr[data-id]');
+      const id = tr.dataset.id;
+      S.shifts = S.shifts.filter(s=>s.id!==id);
+      S.staff.forEach(p => { p.skills = p.skills.filter(sid=>sid!==id); });
+      Object.keys(S.assign).forEach(k => {
+        if(S.assign[k]===id){ delete S.assign[k]; delete S.locked[k]; }
+      });
+      render();
+    }
+  });
+  document.getElementById('btnAddShift').addEventListener('click', () => {
+    S.shifts.push({id:nid(), code:'新', name:'新班別', start:'08:00', end:'16:00', need:1, color:'#888888'});
+    render();
+  });
+
+  document.getElementById('staffCard').addEventListener('input', e => {
+    const tr = e.target.closest('tr[data-id]'); if(!tr) return;
+    const p = S.staff.find(s=>s.id===tr.dataset.id); if(!p) return;
+    const f = e.target.dataset.field; if(!f) return;
+    if(f==='maxWeek') p.maxWeek = Math.max(0, parseInt(e.target.value,10) || 0);
+    else if(f==='name') p.name = e.target.value;
+    else if(f==='off') p.off = e.target.value;
+    renderSched();
+  });
+  document.getElementById('staffCard').addEventListener('change', e => {
+    if(e.target.dataset.field==='skill'){
+      const tr = e.target.closest('tr[data-id]');
+      const p = S.staff.find(s=>s.id===tr.dataset.id); if(!p) return;
+      const sid = e.target.dataset.shift;
+      if(e.target.checked){ if(!p.skills.includes(sid)) p.skills.push(sid); }
+      else { p.skills = p.skills.filter(x=>x!==sid); }
+      renderSched();
+    }
+  });
+  document.getElementById('staffCard').addEventListener('click', e => {
+    if(e.target.dataset.action==='delStaff'){
+      const tr = e.target.closest('tr[data-id]');
+      const id = tr.dataset.id;
+      S.staff = S.staff.filter(p=>p.id!==id);
+      Object.keys(S.assign).forEach(k => {
+        if(k.split('|')[1]===id){ delete S.assign[k]; delete S.locked[k]; }
+      });
+      render();
+    }
+  });
+  document.getElementById('btnAddStaff').addEventListener('click', () => {
+    S.staff.push({id:nid(), name:'新成員', skills:S.shifts.map(s=>s.id), maxWeek:5, off:''});
+    render();
+  });
+
+  document.getElementById('btnSolve').addEventListener('click', () => {
+    solve();
+    renderSched();
+    const r = audit();
+    setStatus(r.bad===0 ? '自動排班完成，沒有發現問題。' : `自動排班完成，尚有 ${r.bad} 個問題待確認，請看下方清單。`);
+  });
+  document.getElementById('btnClearLock').addEventListener('click', () => {
+    S.locked = {};
+    renderSched();
+    setStatus('已清空手動鎖定，下次自動排班會重新調整所有班次。');
+  });
+  document.getElementById('btnSaveJson').addEventListener('click', () => {
+    saveJSON();
+    setStatus('設定已下載。');
+  });
+  document.getElementById('btnLoadJson').addEventListener('click', () => {
+    document.getElementById('fileLoad').click();
+  });
+  document.getElementById('fileLoad').addEventListener('change', e => {
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const obj = JSON.parse(reader.result);
+        loadSettings(obj);
+        setStatus('設定已載入。');
+      }catch(err){
+        setStatus('載入失敗：檔案格式錯誤。');
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file, 'utf-8');
+  });
+  document.getElementById('btnCsv').addEventListener('click', () => {
+    exportCSV();
+    setStatus('CSV 已匯出。');
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
