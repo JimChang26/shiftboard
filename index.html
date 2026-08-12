@@ -296,7 +296,7 @@
     return S.staff.filter(p => check(p, d, sh.id, A).length===0);
   }
 
-  function solve(){
+  function solveOnce(){
     const assign = {};
     for(const k in S.locked){
       if(S.locked[k] && S.assign[k]) assign[k] = S.assign[k];
@@ -365,7 +365,42 @@
       if(!moved) break;
     }
 
+    return assign;
+  }
+
+  function scoreAssign(assign){
+    const saved = S.assign;
     S.assign = assign;
+    const r = audit();
+    let violations=0, shortages=0, staffIssues=0;
+    r.list.forEach(x=>{
+      if(x.type==='violation') violations++;
+      else if(x.type==='shortage') shortages++;
+      else staffIssues++;
+    });
+    let min=Infinity, max=-Infinity;
+    S.staff.forEach(p=>{
+      let c=0;
+      for(let d=0; d<S.days; d++) if(assign[K(d,p.id)]) c++;
+      if(c<min) min=c;
+      if(c>max) max=c;
+    });
+    const spread = S.staff.length ? (max-min) : 0;
+    S.assign = saved;
+    return violations*1000 + shortages*100 + staffIssues*10 + spread;
+  }
+
+  function solve(){
+    const t0 = Date.now();
+    const MAX_ATTEMPTS = 1000, TIME_BUDGET_MS = 10000;
+    let best = null, bestScore = Infinity;
+    for(let i=0; i<MAX_ATTEMPTS && (Date.now()-t0)<TIME_BUDGET_MS; i++){
+      const attempt = solveOnce();
+      const sc = scoreAssign(attempt);
+      if(sc < bestScore){ bestScore = sc; best = attempt; }
+      if(bestScore===0) break;
+    }
+    S.assign = best;
   }
 
   function workRuns(p){
