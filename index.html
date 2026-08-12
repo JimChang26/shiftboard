@@ -141,6 +141,7 @@
         <label>連續上班天數上限 <input type="number" id="inpMaxConsecutive" min="0" max="31"></label>
         <label>連續上班最少天數（避免單獨一天） <input type="number" id="inpMinConsecutive" min="0" max="31"></label>
         <label>至少連休（連續兩天以上）次數 <input type="number" id="inpMinRestStreaks" min="0" max="10"></label>
+        <label>至少休到幾次週末（六、日任一天） <input type="number" id="inpMinWeekendsOff" min="0" max="10"></label>
       </div>
     </div>
 
@@ -243,7 +244,7 @@
   const seedMonth = now.getFullYear() + '-' + pad2(now.getMonth()+1);
 
   const seedShifts = [
-    {id:nid(), code:'班', name:'日班', start:'09:00', end:'18:00', need:2, color:'#0E6F6C'}
+    {id:nid(), code:'班', name:'日班', start:'09:00', end:'18:00', need:2, maxNeed:0, color:'#0E6F6C'}
   ];
   const seedStaff = ['王小明','陳雅婷','林俊傑','李佳穎','張家豪'].map(name => ({
     id:nid(), name, skills:seedShifts.map(s=>s.id), minOff:8, maxOff:0, prevConsecutive:0, off:[]
@@ -252,7 +253,7 @@
 
   const S = {
     month:seedMonth, start:seedMonth+'-01', days:daysInMonth(seedMonth),
-    maxConsecutive:6, minConsecutive:2, minRestStreaks:1,
+    maxConsecutive:6, minConsecutive:2, minRestStreaks:1, minWeekendsOff:1,
     shifts:seedShifts, staff:seedStaff,
     assign:{}, locked:{}
   };
@@ -286,6 +287,14 @@
 
     const existing = assign[K(dayIdx, p.id)];
     if(existing && existing!==shiftId) reasons.push('當日已排其他班別');
+
+    if(shift.maxNeed>0 && !existing){
+      let filled = 0;
+      S.staff.forEach(o=>{
+        if(o.id!==p.id && assign[K(dayIdx,o.id)]===shiftId) filled++;
+      });
+      if(filled+1 > shift.maxNeed) reasons.push(`已達每日最高上班人數（${shift.maxNeed} 人）`);
+    }
 
     if(S.maxConsecutive>0 && consecutiveRun(p, dayIdx, assign) > S.maxConsecutive){
       reasons.push(`超過連續上班上限（${S.maxConsecutive} 天）`);
@@ -448,6 +457,19 @@
     return c;
   }
 
+  function weekendsOffCount(p){
+    let count = 0;
+    for(let d=0; d<S.days-1; d++){
+      const iso = addDays(S.start, d);
+      const [y,m,dd] = iso.split('-').map(Number);
+      if(new Date(y, m-1, dd).getDay() !== 6) continue;
+      const satOff = !S.assign[K(d,p.id)];
+      const sunOff = !S.assign[K(d+1,p.id)];
+      if(satOff || sunOff) count++;
+    }
+    return count;
+  }
+
   function audit(){
     const list = [];
     for(const k in S.assign){
@@ -487,6 +509,12 @@
           list.push({type:'staffIssue', day:S.days, staffId:p.id, message:`有 ${shortRuns} 段連續上班天數少於 ${S.minConsecutive} 天（避免單獨上班一天）`});
         }
       }
+      if(S.minWeekendsOff>0){
+        const wc = weekendsOffCount(p);
+        if(wc < S.minWeekendsOff){
+          list.push({type:'staffIssue', day:S.days, staffId:p.id, message:`週末（六、日任一天）有休到的次數 ${wc} 次，未達設定的 ${S.minWeekendsOff} 次`});
+        }
+      }
     });
     return { bad: list.filter(x=>x.type==='violation').length, list };
   }
@@ -502,6 +530,7 @@
     $('#inpMaxConsecutive').value = S.maxConsecutive;
     $('#inpMinConsecutive').value = S.minConsecutive;
     $('#inpMinRestStreaks').value = S.minRestStreaks;
+    $('#inpMinWeekendsOff').value = S.minWeekendsOff;
 
     const sh = S.shifts[0];
     $('#shiftFields').innerHTML = `
@@ -510,6 +539,7 @@
       <label>開始 <input type="time" data-field="start" value="${esc(sh.start)}"></label>
       <label>結束 <input type="time" data-field="end" value="${esc(sh.end)}"></label>
       <label>每日最低上班人數 <input type="number" min="0" data-field="need" value="${esc(sh.need)}"></label>
+      <label>每日最高上班人數 <input type="number" min="0" data-field="maxNeed" value="${esc(sh.maxNeed)}"></label>
       <label>顏色 <input type="color" data-field="color" value="${esc(sh.color)}"></label>`;
 
     $('#btnModePicker').className = 'btn small' + (offInputMode==='picker' ? '' : ' secondary');
@@ -705,6 +735,7 @@
     S.maxConsecutive = Number.isFinite(obj.maxConsecutive) ? obj.maxConsecutive : S.maxConsecutive;
     S.minConsecutive = Number.isFinite(obj.minConsecutive) ? obj.minConsecutive : S.minConsecutive;
     S.minRestStreaks = Number.isFinite(obj.minRestStreaks) ? obj.minRestStreaks : S.minRestStreaks;
+    S.minWeekendsOff = Number.isFinite(obj.minWeekendsOff) ? obj.minWeekendsOff : S.minWeekendsOff;
 
     const src = Array.isArray(obj.shifts) && obj.shifts[0] ? obj.shifts[0] : null;
     S.shifts = [{
@@ -714,6 +745,7 @@
       start: (src && src.start) || '09:00',
       end: (src && src.end) || '18:00',
       need: src && Number.isFinite(src.need) ? src.need : 1,
+      maxNeed: src && Number.isFinite(src.maxNeed) ? src.maxNeed : 0,
       color: (src && src.color) || '#0E6F6C'
     }];
 
@@ -771,11 +803,15 @@
     S.minRestStreaks = Math.max(0, parseInt(e.target.value,10) || 0);
     renderSched();
   });
+  document.getElementById('inpMinWeekendsOff').addEventListener('change', e => {
+    S.minWeekendsOff = Math.max(0, parseInt(e.target.value,10) || 0);
+    renderSched();
+  });
 
   document.getElementById('shiftCard').addEventListener('input', e => {
     const f = e.target.dataset.field; if(!f) return;
     const sh = S.shifts[0];
-    if(f==='need') sh.need = Math.max(0, parseInt(e.target.value,10) || 0);
+    if(f==='need' || f==='maxNeed') sh[f] = Math.max(0, parseInt(e.target.value,10) || 0);
     else sh[f] = e.target.value;
     renderSched();
   });
