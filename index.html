@@ -42,10 +42,24 @@
   .settingsTable input[type=text],.settingsTable input[type=number],.settingsTable input[type=time]{
     width:100%; min-width:64px; padding:.35em .4em; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink);
   }
-  .settingsTable input[type=color]{ width:2.4em; height:2em; padding:0; border:1px solid var(--line); border-radius:6px; background:#fff; }
   .settingsWrap{ overflow-x:auto; }
-  .skills label{ display:inline-flex; align-items:center; gap:.2em; margin:0 .6em .2em 0; font-size:.82rem; white-space:nowrap; }
   .rowActions{ margin-top:.6em; }
+  .basicFields input[type=color]{ width:2.4em; height:2.2em; padding:0; }
+  .basicFields input[type=time]{ width:7em; }
+
+  .offcell{ min-width:230px; }
+  .offchips{ display:flex; flex-wrap:wrap; gap:.25em; margin-bottom:.35em; }
+  .offchip{ display:inline-flex; align-items:center; gap:.3em; background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:.1em .5em; font-size:.78rem; font-family:'Roboto Mono',monospace; white-space:nowrap; }
+  .offchip button{ background:none; border:none; color:var(--alert); cursor:pointer; font-weight:700; padding:0 .1em; line-height:1; font-size:.95em; }
+
+  .modeToggle{ display:flex; align-items:center; gap:.5em; margin-bottom:.7em; font-size:.85rem; }
+  .offcal-dow, .offcal-grid{ display:grid; grid-template-columns:repeat(7, 1.7em); gap:2px; }
+  .offcal-dow{ margin-bottom:2px; }
+  .offcal-dow span{ font-size:.6rem; opacity:.6; text-align:center; }
+  .offday{ width:1.7em; height:1.7em; padding:0; border:1px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); cursor:pointer; font-family:'Roboto Mono',monospace; font-size:.68rem; }
+  .offday.sel{ background:var(--alert); border-color:var(--alert); color:#fff; font-weight:700; }
+  .offday.blank{ border:none; background:transparent; cursor:default; }
+  .offtext{ width:100%; min-width:180px; padding:.35em .4em; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); font-size:.82rem; resize:vertical; }
 
   .btn{ background:var(--accent); color:#fff; border:none; padding:.55em 1.1em; border-radius:7px; font-weight:600; cursor:pointer; font-size:.92rem; }
   .btn.secondary{ background:transparent; color:var(--accent); border:1px solid var(--accent); }
@@ -114,28 +128,28 @@
     <div class="card" id="basicCard">
       <h2>基本設定</h2>
       <div class="basicFields">
-        <label>起始日期 <input type="date" id="inpStart"></label>
-        <label>天數 <input type="number" id="inpDays" min="1" max="180"></label>
-        <label>最短班間休息（小時） <input type="number" id="inpMinRest" min="0" max="48"></label>
+        <label>月份 <input type="month" id="inpMonth"></label>
+        <label>連續上班天數上限 <input type="number" id="inpMaxConsecutive" min="0" max="31"></label>
+        <label>連續上班最少天數（避免單獨一天） <input type="number" id="inpMinConsecutive" min="0" max="31"></label>
+        <label>至少連休（連續兩天以上）次數 <input type="number" id="inpMinRestStreaks" min="0" max="10"></label>
       </div>
     </div>
 
-    <div class="card" id="shiftsCard">
-      <h2>班別設定</h2>
-      <div class="settingsWrap">
-        <table class="settingsTable">
-          <thead><tr><th>代號</th><th>名稱</th><th>開始</th><th>結束</th><th>需求人數</th><th>顏色</th><th></th></tr></thead>
-          <tbody id="shiftsBody"></tbody>
-        </table>
-      </div>
-      <div class="rowActions"><button type="button" class="btn secondary small" id="btnAddShift">新增班別</button></div>
+    <div class="card" id="shiftCard">
+      <h2>日班設定</h2>
+      <div class="basicFields" id="shiftFields"></div>
     </div>
 
     <div class="card" id="staffCard">
       <h2>人員設定</h2>
+      <div class="modeToggle">
+        不可排日期輸入方式：
+        <button type="button" class="btn small" id="btnModePicker" data-mode="picker">日期選擇</button>
+        <button type="button" class="btn secondary small" id="btnModeText" data-mode="text">手動輸入</button>
+      </div>
       <div class="settingsWrap">
         <table class="settingsTable">
-          <thead><tr><th>姓名</th><th>可排班別</th><th>每週上限（天）</th><th>不可排日期</th><th></th></tr></thead>
+          <thead><tr><th>姓名</th><th>每月休假上限</th><th>前月已連續上班天數</th><th>不可排日期</th><th></th></tr></thead>
           <tbody id="staffBody"></tbody>
         </table>
       </div>
@@ -174,20 +188,11 @@
   function nid(){ return 'i' + (_idc++); }
   function K(d, staffId){ return d + '|' + staffId; }
   function pad2(n){ return String(n).padStart(2,'0'); }
-  function toMin(t){ const [h,m] = t.split(':').map(Number); return h*60+m; }
   function toISO(dt){ return dt.getFullYear()+'-'+pad2(dt.getMonth()+1)+'-'+pad2(dt.getDate()); }
   function addDays(iso, n){
     const [y,m,d] = iso.split('-').map(Number);
     const dt = new Date(y, m-1, d);
     dt.setDate(dt.getDate()+n);
-    return toISO(dt);
-  }
-  function mondayOf(iso){
-    const [y,m,d] = iso.split('-').map(Number);
-    const dt = new Date(y, m-1, d);
-    const day = dt.getDay();
-    const diff = day===0 ? -6 : 1-day;
-    dt.setDate(dt.getDate()+diff);
     return toISO(dt);
   }
   function dLabel(iso){
@@ -196,37 +201,64 @@
     const wk = '日一二三四五六'[dt.getDay()];
     return `${m}/${d}（${wk}）`;
   }
-  function offDays(p){
-    if(!p.off) return [];
-    return p.off.split(',').map(s=>s.trim()).filter(Boolean).map(tok=>{
-      if(/^\d{4}-\d{2}-\d{2}$/.test(tok)) return tok;
-      if(/^\d{2}-\d{2}$/.test(tok)) return S.start.slice(0,4) + '-' + tok;
-      return null;
-    }).filter(Boolean);
+  function normalizeOff(raw){
+    if(Array.isArray(raw)) return raw.filter(s => typeof s==='string' && /^\d{4}-\d{2}-\d{2}$/.test(s));
+    if(typeof raw === 'string'){
+      return raw.split(',').map(s=>s.trim()).filter(Boolean).map(tok=>{
+        if(/^\d{4}-\d{2}-\d{2}$/.test(tok)) return tok;
+        if(/^\d{2}-\d{2}$/.test(tok)) return S.start.slice(0,4) + '-' + tok;
+        return null;
+      }).filter(Boolean);
+    }
+    return [];
   }
-  function shiftAbs(dayIdx, shift){
-    const s = dayIdx*1440 + toMin(shift.start);
-    let e = dayIdx*1440 + toMin(shift.end);
-    if(e<=s) e += 1440;
-    return [s,e];
+  function offDays(p){ return normalizeOff(p.off); }
+  function dShort(iso){
+    const [,m,d] = iso.split('-').map(Number);
+    return `${m}/${d}`;
+  }
+  function daysInMonth(ym){
+    const [y,m] = ym.split('-').map(Number);
+    return new Date(y, m, 0).getDate();
   }
 
   // ---- 狀態 ----
+  const STORAGE_KEY = 'shiftboard.state.v1';
+  const now = new Date();
+  const seedMonth = now.getFullYear() + '-' + pad2(now.getMonth()+1);
+
   const seedShifts = [
-    {id:nid(), code:'早', name:'早班', start:'08:00', end:'16:00', need:2, color:'#E8A317'},
-    {id:nid(), code:'中', name:'中班', start:'12:00', end:'20:00', need:2, color:'#3E7CB1'},
-    {id:nid(), code:'晚', name:'晚班', start:'20:00', end:'04:00', need:1, color:'#463C86'}
+    {id:nid(), code:'班', name:'日班', start:'09:00', end:'18:00', need:2, color:'#0E6F6C'}
   ];
-  const seedStaff = ['王小明','陳雅婷','林俊傑','李佳穎','張家豪','黃詩涵','吳承恩','蔡明哲'].map(name => ({
-    id:nid(), name, skills:seedShifts.map(s=>s.id), maxWeek:5, off:''
+  const seedStaff = ['王小明','陳雅婷','林俊傑','李佳穎','張家豪'].map(name => ({
+    id:nid(), name, skills:seedShifts.map(s=>s.id), maxOff:8, prevConsecutive:0, off:[]
   }));
+  let offInputMode = 'picker';
+
   const S = {
-    start:'2026-08-12', days:14, minRest:11,
+    month:seedMonth, start:seedMonth+'-01', days:daysInMonth(seedMonth),
+    maxConsecutive:6, minConsecutive:2, minRestStreaks:1,
     shifts:seedShifts, staff:seedStaff,
     assign:{}, locked:{}
   };
 
   // ---- 規則 ----
+  function consecutiveRun(p, dayIdx, assign){
+    let back = 0, d = dayIdx-1;
+    while(d>=0 && assign[K(d,p.id)]){ back++; d--; }
+    if(d<0) back += (p.prevConsecutive||0);
+    let fwd = 0; d = dayIdx+1;
+    while(d<S.days && assign[K(d,p.id)]){ fwd++; d++; }
+    return back + 1 + fwd;
+  }
+
+  function backStreak(p, dayIdx, assign){
+    let run = 0, d = dayIdx-1;
+    while(d>=0 && assign[K(d,p.id)]){ run++; d--; }
+    if(d<0) run += (p.prevConsecutive||0);
+    return run;
+  }
+
   function check(p, dayIdx, shiftId, assign){
     const reasons = [];
     const shift = S.shifts.find(s=>s.id===shiftId);
@@ -240,36 +272,10 @@
     const existing = assign[K(dayIdx, p.id)];
     if(existing && existing!==shiftId) reasons.push('當日已排其他班別');
 
-    const wkStart = mondayOf(date);
-    let weekCount = 0;
-    for(let d=0; d<S.days; d++){
-      if(d===dayIdx) continue;
-      const dt = addDays(S.start, d);
-      if(mondayOf(dt) !== wkStart) continue;
-      if(assign[K(d, p.id)]) weekCount++;
+    if(S.maxConsecutive>0 && consecutiveRun(p, dayIdx, assign) > S.maxConsecutive){
+      reasons.push(`超過連續上班上限（${S.maxConsecutive} 天）`);
     }
-    if(weekCount+1 > p.maxWeek) reasons.push('超過每週上限天數');
 
-    const iv = shiftAbs(dayIdx, shift);
-    const ivs = [iv];
-    for(const dd of [dayIdx-1, dayIdx+1]){
-      if(dd<0 || dd>=S.days) continue;
-      const sid2 = assign[K(dd, p.id)];
-      if(!sid2) continue;
-      const sh2 = S.shifts.find(s=>s.id===sid2);
-      if(!sh2) continue;
-      ivs.push(shiftAbs(dd, sh2));
-    }
-    ivs.sort((a,b)=>a[0]-b[0]);
-    for(let i=0; i<ivs.length-1; i++){
-      const gap = ivs[i+1][0] - ivs[i][1];
-      if(gap < 0){
-        if(!reasons.includes('班次時間重疊')) reasons.push('班次時間重疊');
-      } else if(gap < S.minRest*60){
-        const t = `休息時數不足（需 ${S.minRest} 小時）`;
-        if(!reasons.includes(t)) reasons.push(t);
-      }
-    }
     return reasons;
   }
 
@@ -302,9 +308,12 @@
         let need = sh.need - (filled[sh.id]||0);
         if(need<=0) continue;
         let pool = cands(sh, d, assign);
-        pool = pool.map(p=>({p, c:counts[p.id], r:Math.random()}))
-                   .sort((a,b)=> a.c-b.c || a.r-b.r)
-                   .map(x=>x.p);
+        pool = pool.map(p=>{
+          const bs = backStreak(p, d, assign);
+          const needsExtend = (bs>0 && bs<S.minConsecutive) ? 0 : 1;
+          return {p, needsExtend, c:counts[p.id], r:Math.random()};
+        }).sort((a,b)=> a.needsExtend-b.needsExtend || a.c-b.c || a.r-b.r)
+          .map(x=>x.p);
         for(let i=0; i<pool.length && need>0; i++, need--){
           const p = pool[i];
           assign[K(d,p.id)] = sh.id;
@@ -346,6 +355,32 @@
     S.assign = assign;
   }
 
+  function workRuns(p){
+    const runs = [];
+    let run = 0, start = null;
+    for(let d=0; d<S.days; d++){
+      if(S.assign[K(d,p.id)]){
+        if(run===0) start = d;
+        run++;
+      } else if(run>0){
+        runs.push(run + (start===0 ? (p.prevConsecutive||0) : 0));
+        run = 0;
+      }
+    }
+    if(run>0) runs.push(run + (start===0 ? (p.prevConsecutive||0) : 0));
+    return runs;
+  }
+
+  function restStreakCount(p){
+    let count=0, run=0;
+    for(let d=0; d<S.days; d++){
+      if(S.assign[K(d,p.id)]){ if(run>=2) count++; run=0; }
+      else run++;
+    }
+    if(run>=2) count++;
+    return count;
+  }
+
   function audit(){
     const list = [];
     for(const k in S.assign){
@@ -366,6 +401,24 @@
         if(filled < sh.need) list.push({type:'shortage', day:d, shiftId:sh.id, filled, need:sh.need});
       }
     }
+    S.staff.forEach(p => {
+      const offCount = offDays(p).length;
+      if(p.maxOff>0 && offCount > p.maxOff){
+        list.push({type:'staffIssue', day:S.days, staffId:p.id, message:`休假天數（${offCount}）超過每月休假上限（${p.maxOff}）`});
+      }
+      if(S.minRestStreaks>0){
+        const rc = restStreakCount(p);
+        if(rc < S.minRestStreaks){
+          list.push({type:'staffIssue', day:S.days, staffId:p.id, message:`連休（連續兩天以上休假）次數 ${rc} 次，未達設定的 ${S.minRestStreaks} 次`});
+        }
+      }
+      if(S.minConsecutive>1){
+        const shortRuns = workRuns(p).filter(len => len < S.minConsecutive).length;
+        if(shortRuns>0){
+          list.push({type:'staffIssue', day:S.days, staffId:p.id, message:`有 ${shortRuns} 段連續上班天數少於 ${S.minConsecutive} 天（避免單獨上班一天）`});
+        }
+      }
+    });
     return { bad: list.filter(x=>x.type==='violation').length, list };
   }
 
@@ -376,29 +429,52 @@
   }
 
   function renderSettings(){
-    $('#inpStart').value = S.start;
-    $('#inpDays').value = S.days;
-    $('#inpMinRest').value = S.minRest;
+    $('#inpMonth').value = S.month;
+    $('#inpMaxConsecutive').value = S.maxConsecutive;
+    $('#inpMinConsecutive').value = S.minConsecutive;
+    $('#inpMinRestStreaks').value = S.minRestStreaks;
 
-    $('#shiftsBody').innerHTML = S.shifts.map(sh => `
-      <tr data-id="${esc(sh.id)}">
-        <td><input type="text" data-field="code" value="${esc(sh.code)}" maxlength="4"></td>
-        <td><input type="text" data-field="name" value="${esc(sh.name)}"></td>
-        <td><input type="time" data-field="start" value="${esc(sh.start)}"></td>
-        <td><input type="time" data-field="end" value="${esc(sh.end)}"></td>
-        <td><input type="number" min="0" data-field="need" value="${esc(sh.need)}"></td>
-        <td><input type="color" data-field="color" value="${esc(sh.color)}"></td>
-        <td><button type="button" class="btn danger small" data-action="delShift">刪除</button></td>
-      </tr>`).join('');
+    const sh = S.shifts[0];
+    $('#shiftFields').innerHTML = `
+      <label>名稱 <input type="text" data-field="name" value="${esc(sh.name)}"></label>
+      <label>代號 <input type="text" data-field="code" value="${esc(sh.code)}" maxlength="4"></label>
+      <label>開始 <input type="time" data-field="start" value="${esc(sh.start)}"></label>
+      <label>結束 <input type="time" data-field="end" value="${esc(sh.end)}"></label>
+      <label>每日最低上班人數 <input type="number" min="0" data-field="need" value="${esc(sh.need)}"></label>
+      <label>顏色 <input type="color" data-field="color" value="${esc(sh.color)}"></label>`;
 
-    $('#staffBody').innerHTML = S.staff.map(p => `
+    $('#btnModePicker').className = 'btn small' + (offInputMode==='picker' ? '' : ' secondary');
+    $('#btnModeText').className = 'btn small' + (offInputMode==='text' ? '' : ' secondary');
+
+    const [fy, fm] = S.month.split('-').map(Number);
+    const firstDow = new Date(fy, fm-1, 1).getDay();
+    $('#staffBody').innerHTML = S.staff.map(p => {
+      const offSet = offDays(p);
+      let offUI;
+      if(offInputMode==='text'){
+        offUI = `<textarea class="offtext" data-field="offText" rows="2" placeholder="例如：08-20, 08-21, ${S.month}-25">${esc(offSet.join(', '))}</textarea>`;
+      } else {
+        const chips = offSet.map(d => `<span class="offchip">${esc(dShort(d))}<button type="button" data-action="delOff" data-date="${esc(d)}" aria-label="移除 ${esc(dShort(d))}">×</button></span>`).join('');
+        let cells = '';
+        for(let i=0;i<firstDow;i++) cells += `<span class="offday blank"></span>`;
+        for(let day=1; day<=S.days; day++){
+          const iso = `${S.month}-${pad2(day)}`;
+          cells += `<button type="button" class="offday${offSet.includes(iso)?' sel':''}" data-date="${iso}">${day}</button>`;
+        }
+        offUI = `
+          <div class="offchips">${chips}</div>
+          <div class="offcal-dow">${'日一二三四五六'.split('').map(c=>`<span>${c}</span>`).join('')}</div>
+          <div class="offcal-grid">${cells}</div>`;
+      }
+      return `
       <tr data-id="${esc(p.id)}">
         <td><input type="text" data-field="name" value="${esc(p.name)}"></td>
-        <td class="skills">${S.shifts.map(sh => `<label><input type="checkbox" data-field="skill" data-shift="${esc(sh.id)}" ${p.skills.includes(sh.id)?'checked':''}> ${esc(sh.code)}</label>`).join('')}</td>
-        <td><input type="number" min="0" data-field="maxWeek" value="${esc(p.maxWeek)}"></td>
-        <td><input type="text" data-field="off" value="${esc(p.off||'')}" placeholder="例如：08-20, 08-21"></td>
+        <td><input type="number" min="0" data-field="maxOff" value="${esc(p.maxOff)}"></td>
+        <td><input type="number" min="0" data-field="prevConsecutive" value="${esc(p.prevConsecutive)}"></td>
+        <td class="offcell">${offUI}</td>
         <td><button type="button" class="btn danger small" data-action="delStaff">刪除</button></td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
   }
 
   function renderSched(){
@@ -459,10 +535,21 @@
           const sh = S.shifts.find(s=>s.id===item.shiftId);
           return `<div class="issue">${dLabel(dates[item.day])} ${esc(p?p.name:'')}：${esc(sh?sh.name:'')} — ${item.reasons.map(esc).join('、')}</div>`;
         }
+        if(item.type==='staffIssue'){
+          const p = S.staff.find(s=>s.id===item.staffId);
+          return `<div class="issue">${esc(p?p.name:'')}：${esc(item.message)}</div>`;
+        }
         const sh = S.shifts.find(s=>s.id===item.shiftId);
         return `<div class="issue">${dLabel(dates[item.day])} ${esc(sh?sh.name:'')} 人力不足（${item.filled}/${item.need}）</div>`;
       }).join('');
     }
+
+    persist();
+  }
+
+  function persist(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); }
+    catch(err){ /* 無法寫入（例如停用儲存）時安靜略過，不影響其他功能 */ }
   }
 
   function cycle(k){
@@ -516,22 +603,43 @@
     downloadBlob(JSON.stringify(S, null, 2), 'application/json', `排班設定_${S.start}.json`);
   }
   function loadSettings(obj){
-    S.start = /^\d{4}-\d{2}-\d{2}$/.test(obj.start) ? obj.start : S.start;
-    S.days = Number.isFinite(obj.days) && obj.days>0 ? obj.days : S.days;
-    S.minRest = Number.isFinite(obj.minRest) ? obj.minRest : S.minRest;
-    S.shifts = Array.isArray(obj.shifts) ? obj.shifts.map(sh => ({
-      id: sh.id || nid(), code: sh.code || '', name: sh.name || '',
-      start: sh.start || '08:00', end: sh.end || '16:00',
-      need: Number.isFinite(sh.need) ? sh.need : 0, color: sh.color || '#888888'
-    })) : S.shifts;
+    const m = /^\d{4}-\d{2}$/.test(obj.month) ? obj.month
+            : (/^\d{4}-\d{2}-\d{2}$/.test(obj.start) ? obj.start.slice(0,7) : S.month);
+    S.month = m;
+    S.start = m + '-01';
+    S.days = daysInMonth(m);
+    S.maxConsecutive = Number.isFinite(obj.maxConsecutive) ? obj.maxConsecutive : S.maxConsecutive;
+    S.minConsecutive = Number.isFinite(obj.minConsecutive) ? obj.minConsecutive : S.minConsecutive;
+    S.minRestStreaks = Number.isFinite(obj.minRestStreaks) ? obj.minRestStreaks : S.minRestStreaks;
+
+    const src = Array.isArray(obj.shifts) && obj.shifts[0] ? obj.shifts[0] : null;
+    S.shifts = [{
+      id: (src && src.id) || S.shifts[0].id,
+      code: (src && src.code) || '班',
+      name: (src && src.name) || '日班',
+      start: (src && src.start) || '09:00',
+      end: (src && src.end) || '18:00',
+      need: src && Number.isFinite(src.need) ? src.need : 1,
+      color: (src && src.color) || '#0E6F6C'
+    }];
+
     S.staff = Array.isArray(obj.staff) ? obj.staff.map(p => ({
       id: p.id || nid(), name: p.name || '',
-      skills: Array.isArray(p.skills) ? p.skills : [],
-      maxWeek: Number.isFinite(p.maxWeek) ? p.maxWeek : 5,
-      off: p.off || ''
+      skills: [S.shifts[0].id],
+      maxOff: Number.isFinite(p.maxOff) ? p.maxOff : 8,
+      prevConsecutive: Number.isFinite(p.prevConsecutive) ? p.prevConsecutive : 0,
+      off: normalizeOff(p.off)
     })) : S.staff;
+
     S.assign = (obj.assign && typeof obj.assign==='object') ? obj.assign : {};
     S.locked = (obj.locked && typeof obj.locked==='object') ? obj.locked : {};
+
+    const validShiftIds = new Set(S.shifts.map(s=>s.id));
+    Object.keys(S.assign).forEach(k => {
+      const d = Number(k.split('|')[0]);
+      if(d>=S.days || !validShiftIds.has(S.assign[k])){ delete S.assign[k]; delete S.locked[k]; }
+    });
+
     render();
   }
 
@@ -545,80 +653,93 @@
     if(td && (e.key===' ' || e.key==='Enter')){ e.preventDefault(); cycle(td.dataset.k); }
   });
 
-  document.getElementById('inpStart').addEventListener('change', e => {
-    if(/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)){ S.start = e.target.value; renderSched(); }
-  });
-  document.getElementById('inpDays').addEventListener('change', e => {
-    let n = parseInt(e.target.value, 10) || 1;
-    n = Math.max(1, Math.min(180, n));
-    S.days = n; e.target.value = n;
+  document.getElementById('inpMonth').addEventListener('change', e => {
+    if(!/^\d{4}-\d{2}$/.test(e.target.value)) return;
+    S.month = e.target.value;
+    S.start = S.month + '-01';
+    const newDays = daysInMonth(S.month);
     Object.keys(S.assign).forEach(k => {
-      if(Number(k.split('|')[0]) >= n){ delete S.assign[k]; delete S.locked[k]; }
+      if(Number(k.split('|')[0]) >= newDays){ delete S.assign[k]; delete S.locked[k]; }
     });
+    S.days = newDays;
+    render();
+  });
+  document.getElementById('inpMaxConsecutive').addEventListener('change', e => {
+    S.maxConsecutive = Math.max(0, parseInt(e.target.value,10) || 0);
     renderSched();
   });
-  document.getElementById('inpMinRest').addEventListener('change', e => {
-    S.minRest = Math.max(0, parseInt(e.target.value,10) || 0);
+  document.getElementById('inpMinConsecutive').addEventListener('change', e => {
+    S.minConsecutive = Math.max(0, parseInt(e.target.value,10) || 0);
+    renderSched();
+  });
+  document.getElementById('inpMinRestStreaks').addEventListener('change', e => {
+    S.minRestStreaks = Math.max(0, parseInt(e.target.value,10) || 0);
     renderSched();
   });
 
-  document.getElementById('shiftsCard').addEventListener('input', e => {
-    const tr = e.target.closest('tr[data-id]'); if(!tr) return;
-    const sh = S.shifts.find(s=>s.id===tr.dataset.id); if(!sh) return;
+  document.getElementById('shiftCard').addEventListener('input', e => {
     const f = e.target.dataset.field; if(!f) return;
+    const sh = S.shifts[0];
     if(f==='need') sh.need = Math.max(0, parseInt(e.target.value,10) || 0);
     else sh[f] = e.target.value;
     renderSched();
-  });
-  document.getElementById('shiftsCard').addEventListener('click', e => {
-    if(e.target.dataset.action==='delShift'){
-      const tr = e.target.closest('tr[data-id]');
-      const id = tr.dataset.id;
-      S.shifts = S.shifts.filter(s=>s.id!==id);
-      S.staff.forEach(p => { p.skills = p.skills.filter(sid=>sid!==id); });
-      Object.keys(S.assign).forEach(k => {
-        if(S.assign[k]===id){ delete S.assign[k]; delete S.locked[k]; }
-      });
-      render();
-    }
-  });
-  document.getElementById('btnAddShift').addEventListener('click', () => {
-    S.shifts.push({id:nid(), code:'新', name:'新班別', start:'08:00', end:'16:00', need:1, color:'#888888'});
-    render();
   });
 
   document.getElementById('staffCard').addEventListener('input', e => {
     const tr = e.target.closest('tr[data-id]'); if(!tr) return;
     const p = S.staff.find(s=>s.id===tr.dataset.id); if(!p) return;
-    const f = e.target.dataset.field; if(!f) return;
-    if(f==='maxWeek') p.maxWeek = Math.max(0, parseInt(e.target.value,10) || 0);
+    const f = e.target.dataset.field; if(!f || f==='offText') return;
+    if(f==='maxOff') p.maxOff = Math.max(0, parseInt(e.target.value,10) || 0);
+    else if(f==='prevConsecutive') p.prevConsecutive = Math.max(0, parseInt(e.target.value,10) || 0);
     else if(f==='name') p.name = e.target.value;
-    else if(f==='off') p.off = e.target.value;
     renderSched();
   });
   document.getElementById('staffCard').addEventListener('change', e => {
-    if(e.target.dataset.field==='skill'){
-      const tr = e.target.closest('tr[data-id]');
-      const p = S.staff.find(s=>s.id===tr.dataset.id); if(!p) return;
-      const sid = e.target.dataset.shift;
-      if(e.target.checked){ if(!p.skills.includes(sid)) p.skills.push(sid); }
-      else { p.skills = p.skills.filter(x=>x!==sid); }
-      renderSched();
+    if(e.target.dataset.field!=='offText') return;
+    const tr = e.target.closest('tr[data-id]'); if(!tr) return;
+    const p = S.staff.find(s=>s.id===tr.dataset.id); if(!p) return;
+    let parsed = Array.from(new Set(normalizeOff(e.target.value))).sort();
+    if(p.maxOff>0 && parsed.length>p.maxOff){
+      setStatus(`${p.name} 輸入的休假天數（${parsed.length}）超過每月休假上限（${p.maxOff}），僅保留前 ${p.maxOff} 筆。`);
+      parsed = parsed.slice(0, p.maxOff);
     }
+    p.off = parsed;
+    render();
   });
   document.getElementById('staffCard').addEventListener('click', e => {
-    if(e.target.dataset.action==='delStaff'){
-      const tr = e.target.closest('tr[data-id]');
-      const id = tr.dataset.id;
-      S.staff = S.staff.filter(p=>p.id!==id);
+    if(e.target.dataset.mode){
+      offInputMode = e.target.dataset.mode;
+      renderSettings();
+      return;
+    }
+    const tr = e.target.closest('tr[data-id]'); if(!tr) return;
+    const p = S.staff.find(s=>s.id===tr.dataset.id); if(!p) return;
+    const action = e.target.dataset.action;
+    if(action==='delStaff'){
+      S.staff = S.staff.filter(s=>s.id!==p.id);
       Object.keys(S.assign).forEach(k => {
-        if(k.split('|')[1]===id){ delete S.assign[k]; delete S.locked[k]; }
+        if(k.split('|')[1]===p.id){ delete S.assign[k]; delete S.locked[k]; }
       });
       render();
+    } else if(action==='delOff'){
+      p.off = p.off.filter(d=>d!==e.target.dataset.date);
+      render();
+    } else if(e.target.classList.contains('offday') && e.target.dataset.date){
+      const date = e.target.dataset.date;
+      if(p.off.includes(date)){
+        p.off = p.off.filter(d=>d!==date);
+        render();
+      } else if(p.maxOff>0 && p.off.length>=p.maxOff){
+        setStatus(`${p.name} 的休假天數已達本月上限（${p.maxOff} 天）。`);
+      } else {
+        p.off.push(date);
+        p.off.sort();
+        render();
+      }
     }
   });
   document.getElementById('btnAddStaff').addEventListener('click', () => {
-    S.staff.push({id:nid(), name:'新成員', skills:S.shifts.map(s=>s.id), maxWeek:5, off:''});
+    S.staff.push({id:nid(), name:'新成員', skills:[S.shifts[0].id], maxOff:8, prevConsecutive:0, off:[]});
     render();
   });
 
@@ -626,7 +747,7 @@
     solve();
     renderSched();
     const r = audit();
-    setStatus(r.bad===0 ? '自動排班完成，沒有發現問題。' : `自動排班完成，尚有 ${r.bad} 個問題待確認，請看下方清單。`);
+    setStatus(r.list.length===0 ? '自動排班完成，沒有發現問題。' : `自動排班完成，尚有 ${r.list.length} 個問題待確認，請看下方清單。`);
   });
   document.getElementById('btnClearLock').addEventListener('click', () => {
     S.locked = {};
@@ -660,7 +781,13 @@
     setStatus('CSV 已匯出。');
   });
 
-  render();
+  (function initFromStorage(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){ loadSettings(JSON.parse(raw)); return; }
+    }catch(err){ /* 讀取失敗則使用預設值 */ }
+    render();
+  })();
 })();
 </script>
 </body>
