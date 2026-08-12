@@ -151,7 +151,7 @@
       </div>
       <div class="settingsWrap">
         <table class="settingsTable">
-          <thead><tr><th>姓名</th><th>每月休假上限</th><th>前月已連續上班天數</th><th>不可排日期</th><th></th></tr></thead>
+          <thead><tr><th>姓名</th><th>每月休假下限</th><th>前月已連續上班天數</th><th>不可排日期</th><th></th></tr></thead>
           <tbody id="staffBody"></tbody>
         </table>
       </div>
@@ -233,7 +233,7 @@
     {id:nid(), code:'班', name:'日班', start:'09:00', end:'18:00', need:2, color:'#0E6F6C'}
   ];
   const seedStaff = ['王小明','陳雅婷','林俊傑','李佳穎','張家豪'].map(name => ({
-    id:nid(), name, skills:seedShifts.map(s=>s.id), maxOff:8, prevConsecutive:0, off:[]
+    id:nid(), name, skills:seedShifts.map(s=>s.id), minOff:8, prevConsecutive:0, off:[]
   }));
   let offInputMode = 'picker';
 
@@ -276,6 +276,17 @@
 
     if(S.maxConsecutive>0 && consecutiveRun(p, dayIdx, assign) > S.maxConsecutive){
       reasons.push(`超過連續上班上限（${S.maxConsecutive} 天）`);
+    }
+
+    if(p.minOff>0){
+      let workCount = 0;
+      for(let d=0; d<S.days; d++){
+        if(d===dayIdx) continue;
+        if(assign[K(d,p.id)]) workCount++;
+      }
+      if(workCount+1 > S.days - p.minOff){
+        reasons.push(`會使本月休假天數低於下限（${p.minOff} 天）`);
+      }
     }
 
     return reasons;
@@ -404,10 +415,6 @@
       }
     }
     S.staff.forEach(p => {
-      const offCount = offDays(p).length;
-      if(p.maxOff>0 && offCount > p.maxOff){
-        list.push({type:'staffIssue', day:S.days, staffId:p.id, message:`休假天數（${offCount}）超過每月休假上限（${p.maxOff}）`});
-      }
       if(S.minRestStreaks>0){
         const rc = restStreakCount(p);
         if(rc < S.minRestStreaks){
@@ -471,7 +478,7 @@
       return `
       <tr data-id="${esc(p.id)}">
         <td><input type="text" data-field="name" value="${esc(p.name)}"></td>
-        <td><input type="number" min="0" data-field="maxOff" value="${esc(p.maxOff)}"></td>
+        <td><input type="number" min="0" data-field="minOff" value="${esc(p.minOff)}"></td>
         <td><input type="number" min="0" data-field="prevConsecutive" value="${esc(p.prevConsecutive)}"></td>
         <td class="offcell">${offUI}</td>
         <td><button type="button" class="btn danger small" data-action="delStaff">刪除</button></td>
@@ -519,14 +526,15 @@
         const content = sh ? `<span class="chip" style="background:${esc(sh.color)}">${esc(sh.code)}</span>` : '';
         return `<td class="${cls.join(' ')}" tabindex="0" role="button" aria-label="${esc(label)}" data-k="${esc(k)}">${content}</td>`;
       }).join('');
-      return `<tr><th class="staffcol">${esc(p.name)}</th>${cells}</tr>`;
+      const nameLabel = p.prevConsecutive>0 ? `${p.name}(${p.prevConsecutive})` : p.name;
+      return `<tr><th class="staffcol">${esc(nameLabel)}</th>${cells}</tr>`;
     }).join('');
 
     $('#schedTable').innerHTML = `<thead>${theadRow1}${covRow}</thead><tbody>${bodyRows}</tbody>`;
 
     $('#legend').innerHTML = S.shifts.map(sh =>
       `<span class="legend-item"><span class="swatch" style="background:${esc(sh.color)}"></span>${esc(sh.code)} ${esc(sh.name)}</span>`
-    ).join('') + `<span class="legend-item legend-note">斜線＝不可排日期　紅框＝排班問題　●＝手動鎖定</span>`;
+    ).join('') + `<span class="legend-item legend-note">斜線＝不可排日期　紅框＝排班問題　●＝手動鎖定　姓名後(N)＝前月已連續上班天數</span>`;
 
     if(auditResult.list.length===0){
       $('#audit').innerHTML = '<p class="ok">目前沒有排班問題。</p>';
@@ -628,7 +636,7 @@
     S.staff = Array.isArray(obj.staff) ? obj.staff.map(p => ({
       id: p.id || nid(), name: p.name || '',
       skills: [S.shifts[0].id],
-      maxOff: Number.isFinite(p.maxOff) ? p.maxOff : 8,
+      minOff: Number.isFinite(p.minOff) ? p.minOff : 8,
       prevConsecutive: Number.isFinite(p.prevConsecutive) ? p.prevConsecutive : 0,
       off: normalizeOff(p.off)
     })) : S.staff;
@@ -691,7 +699,7 @@
     const tr = e.target.closest('tr[data-id]'); if(!tr) return;
     const p = S.staff.find(s=>s.id===tr.dataset.id); if(!p) return;
     const f = e.target.dataset.field; if(!f || f==='offText') return;
-    if(f==='maxOff') p.maxOff = Math.max(0, parseInt(e.target.value,10) || 0);
+    if(f==='minOff') p.minOff = Math.max(0, parseInt(e.target.value,10) || 0);
     else if(f==='prevConsecutive') p.prevConsecutive = Math.max(0, parseInt(e.target.value,10) || 0);
     else if(f==='name') p.name = e.target.value;
     renderSched();
@@ -700,11 +708,7 @@
     if(e.target.dataset.field!=='offText') return;
     const tr = e.target.closest('tr[data-id]'); if(!tr) return;
     const p = S.staff.find(s=>s.id===tr.dataset.id); if(!p) return;
-    let parsed = Array.from(new Set(normalizeOff(e.target.value))).sort();
-    if(p.maxOff>0 && parsed.length>p.maxOff){
-      setStatus(`${p.name} 輸入的休假天數（${parsed.length}）超過每月休假上限（${p.maxOff}），僅保留前 ${p.maxOff} 筆。`);
-      parsed = parsed.slice(0, p.maxOff);
-    }
+    const parsed = Array.from(new Set(normalizeOff(e.target.value))).sort();
     p.off = parsed;
     render();
   });
@@ -730,18 +734,15 @@
       const date = e.target.dataset.date;
       if(p.off.includes(date)){
         p.off = p.off.filter(d=>d!==date);
-        render();
-      } else if(p.maxOff>0 && p.off.length>=p.maxOff){
-        setStatus(`${p.name} 的休假天數已達本月上限（${p.maxOff} 天）。`);
       } else {
         p.off.push(date);
         p.off.sort();
-        render();
       }
+      render();
     }
   });
   document.getElementById('btnAddStaff').addEventListener('click', () => {
-    S.staff.push({id:nid(), name:'新成員', skills:[S.shifts[0].id], maxOff:8, prevConsecutive:0, off:[]});
+    S.staff.push({id:nid(), name:'新成員', skills:[S.shifts[0].id], minOff:8, prevConsecutive:0, off:[]});
     render();
   });
 
