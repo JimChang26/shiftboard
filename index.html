@@ -158,7 +158,7 @@
       </div>
       <div class="settingsWrap">
         <table class="settingsTable">
-          <thead><tr><th>姓名</th><th>每月休假下限</th><th>前月已連續上班天數</th><th>不可排日期</th><th></th></tr></thead>
+          <thead><tr><th>姓名</th><th>每月休假下限</th><th>每月休假上限</th><th>前月已連續上班天數</th><th>不可排日期</th><th></th></tr></thead>
           <tbody id="staffBody"></tbody>
         </table>
       </div>
@@ -173,6 +173,7 @@
     <button type="button" class="btn secondary" id="btnLoadJson">載入設定</button>
     <input type="file" id="fileLoad" accept="application/json" hidden>
     <button type="button" class="btn secondary" id="btnCsv">匯出 CSV</button>
+    <button type="button" class="btn secondary" id="btnExcel">匯出 Excel</button>
     <span id="status" role="status" aria-live="polite"></span>
   </section>
 
@@ -245,7 +246,7 @@
     {id:nid(), code:'班', name:'日班', start:'09:00', end:'18:00', need:2, color:'#0E6F6C'}
   ];
   const seedStaff = ['王小明','陳雅婷','林俊傑','李佳穎','張家豪'].map(name => ({
-    id:nid(), name, skills:seedShifts.map(s=>s.id), minOff:8, prevConsecutive:0, off:[]
+    id:nid(), name, skills:seedShifts.map(s=>s.id), minOff:8, maxOff:0, prevConsecutive:0, off:[]
   }));
   let offInputMode = 'picker';
 
@@ -441,6 +442,12 @@
     return count;
   }
 
+  function workDayCount(p){
+    let c = 0;
+    for(let d=0; d<S.days; d++) if(S.assign[K(d,p.id)]) c++;
+    return c;
+  }
+
   function audit(){
     const list = [];
     for(const k in S.assign){
@@ -462,6 +469,12 @@
       }
     }
     S.staff.forEach(p => {
+      if(p.maxOff>0){
+        const offCount = S.days - workDayCount(p);
+        if(offCount > p.maxOff){
+          list.push({type:'staffIssue', day:S.days, staffId:p.id, message:`休假天數（${offCount}）超過每月休假上限（${p.maxOff}）`});
+        }
+      }
       if(S.minRestStreaks>0){
         const rc = restStreakCount(p);
         if(rc < S.minRestStreaks){
@@ -526,6 +539,7 @@
       <tr data-id="${esc(p.id)}">
         <td><input type="text" data-field="name" value="${esc(p.name)}"></td>
         <td><input type="number" min="0" data-field="minOff" value="${esc(p.minOff)}"></td>
+        <td><input type="number" min="0" data-field="maxOff" value="${esc(p.maxOff)}"></td>
         <td><input type="number" min="0" data-field="prevConsecutive" value="${esc(p.prevConsecutive)}"></td>
         <td class="offcell">${offUI}</td>
         <td><button type="button" class="btn danger small" data-action="delStaff">刪除</button></td>
@@ -656,6 +670,29 @@
     const csv = rows.map(r => r.map(csvCell).join(',')).join('\r\n');
     downloadBlob('﻿'+csv, 'text/csv;charset=utf-8', `班表_${S.start}.csv`);
   }
+  function exportExcel(){
+    const dates = Array.from({length:S.days}, (_,d) => addDays(S.start, d));
+    const offFill = '#E7ECEF';
+    let rows = '<tr><th>人員</th>' + dates.map(iso => `<th>${esc(dLabel(iso))}</th>`).join('') + '</tr>';
+    S.staff.forEach(p => {
+      const offList = offDays(p);
+      const cells = dates.map((iso,d) => {
+        const sid = S.assign[K(d,p.id)];
+        const sh = sid ? S.shifts.find(s=>s.id===sid) : null;
+        if(sh) return `<td style="background:${esc(sh.color)};color:#ffffff;text-align:center;">${esc(sh.code)}</td>`;
+        if(offList.includes(iso)) return `<td style="background:${offFill};text-align:center;"></td>`;
+        return `<td style="text-align:center;"></td>`;
+      }).join('');
+      rows += `<tr><td>${esc(p.name)}</td>${cells}</tr>`;
+    });
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8">
+<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>班表</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+<style>table{border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt;} th,td{border:1px solid #999999;padding:4px 6px;} th{background:#15212B;color:#ffffff;}</style>
+</head>
+<body><table>${rows}</table></body></html>`;
+    downloadBlob('﻿'+html, 'application/vnd.ms-excel', `班表_${S.start}.xls`);
+  }
   function saveJSON(){
     downloadBlob(JSON.stringify(S, null, 2), 'application/json', `排班設定_${S.start}.json`);
   }
@@ -684,6 +721,7 @@
       id: p.id || nid(), name: p.name || '',
       skills: [S.shifts[0].id],
       minOff: Number.isFinite(p.minOff) ? p.minOff : 8,
+      maxOff: Number.isFinite(p.maxOff) ? p.maxOff : 0,
       prevConsecutive: Number.isFinite(p.prevConsecutive) ? p.prevConsecutive : 0,
       off: normalizeOff(p.off)
     })) : S.staff;
@@ -747,6 +785,7 @@
     const p = S.staff.find(s=>s.id===tr.dataset.id); if(!p) return;
     const f = e.target.dataset.field; if(!f || f==='offText') return;
     if(f==='minOff') p.minOff = Math.max(0, parseInt(e.target.value,10) || 0);
+    else if(f==='maxOff') p.maxOff = Math.max(0, parseInt(e.target.value,10) || 0);
     else if(f==='prevConsecutive') p.prevConsecutive = Math.max(0, parseInt(e.target.value,10) || 0);
     else if(f==='name') p.name = e.target.value;
     renderSched();
@@ -789,7 +828,7 @@
     }
   });
   document.getElementById('btnAddStaff').addEventListener('click', () => {
-    S.staff.push({id:nid(), name:'新成員', skills:[S.shifts[0].id], minOff:8, prevConsecutive:0, off:[]});
+    S.staff.push({id:nid(), name:'新成員', skills:[S.shifts[0].id], minOff:8, maxOff:0, prevConsecutive:0, off:[]});
     render();
   });
 
@@ -837,6 +876,10 @@
   document.getElementById('btnCsv').addEventListener('click', () => {
     exportCSV();
     setStatus('CSV 已匯出。');
+  });
+  document.getElementById('btnExcel').addEventListener('click', () => {
+    exportExcel();
+    setStatus('Excel 已匯出（用 Excel 開啟時若跳出「檔案格式與副檔名不符」的提示，選「是」開啟即可）。');
   });
 
   (function initFromStorage(){
