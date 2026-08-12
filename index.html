@@ -701,27 +701,67 @@
     downloadBlob('﻿'+csv, 'text/csv;charset=utf-8', `班表_${S.start}.csv`);
   }
   function exportExcel(){
+    const HEAD_BG = '#4472C4', HEAD_FG = '#ffffff';
+    const WEEKEND_BG = '#FFD966';
+    const LOCKED_BG = '#BDD7EE';
+    const GRAY_BG = '#D9D9D9';
+    const OFF_FG = '#FF0000';
+
     const dates = Array.from({length:S.days}, (_,d) => addDays(S.start, d));
-    const offFill = '#E7ECEF';
-    let rows = '<tr><th>人員</th>' + dates.map(iso => `<th>${esc(dLabel(iso))}</th>`).join('') + '</tr>';
+    const dowChar = iso => {
+      const [y,m,d] = iso.split('-').map(Number);
+      return '日一二三四五六'[new Date(y,m-1,d).getDay()];
+    };
+    const isWeekend = iso => { const c = dowChar(iso); return c==='六' || c==='日'; };
+    const [yy,mm] = S.month.split('-').map(Number);
+    const colCount = S.days + 1;
+
+    const thStyle = `background:${HEAD_BG};color:${HEAD_FG};font-weight:bold;text-align:center;`;
+
+    let html = '';
+    html += `<tr><td colspan="${colCount}" style="background:${HEAD_BG};color:${HEAD_FG};font-weight:bold;font-size:20pt;text-align:center;">${yy}年${mm}月排班表</td></tr>`;
+
+    html += `<tr><td style="${thStyle}">日期</td>` + dates.map((iso,d) => `<td style="${thStyle}">${d+1}</td>`).join('') + '</tr>';
+
+    html += `<tr><td style="${thStyle}">星期</td>` + dates.map(iso => {
+      const weekend = isWeekend(iso);
+      return `<td style="text-align:center;font-weight:bold;${weekend?`background:${WEEKEND_BG};`:''}">${dowChar(iso)}</td>`;
+    }).join('') + '</tr>';
+
     S.staff.forEach(p => {
-      const offList = offDays(p);
+      const nameLabel = `${p.name}${p.prevConsecutive||0}`;
       const cells = dates.map((iso,d) => {
-        const sid = S.assign[K(d,p.id)];
+        const k = K(d,p.id);
+        const sid = S.assign[k];
         const sh = sid ? S.shifts.find(s=>s.id===sid) : null;
-        if(sh) return `<td style="background:${esc(sh.color)};color:#ffffff;text-align:center;">${esc(sh.code)}</td>`;
-        if(offList.includes(iso)) return `<td style="background:${offFill};text-align:center;"></td>`;
-        return `<td style="text-align:center;"></td>`;
+        const locked = !!S.locked[k];
+        const bg = locked ? LOCKED_BG : '#ffffff';
+        if(sh) return `<td style="background:${bg};text-align:center;">${esc(sh.code)}</td>`;
+        return `<td style="background:${bg};text-align:center;color:${OFF_FG};font-weight:bold;">OFF</td>`;
       }).join('');
-      rows += `<tr><td>${esc(p.name)}</td>${cells}</tr>`;
+      html += `<tr><td style="font-weight:bold;">${esc(nameLabel)}</td>${cells}</tr>`;
     });
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+
+    html += `<tr><td style="background:${GRAY_BG};font-weight:bold;">上班人數</td>` + dates.map((iso,d) => {
+      let filled = 0;
+      S.staff.forEach(p => { if(S.assign[K(d,p.id)]) filled++; });
+      return `<td style="background:${GRAY_BG};text-align:center;font-weight:bold;">${filled}</td>`;
+    }).join('') + '</tr>';
+
+    html += `<tr><td colspan="${colCount}"></td></tr>`;
+    html += `<tr><td colspan="${colCount}" style="font-weight:bold;font-size:13pt;">休假統計</td></tr>`;
+    html += `<tr><td style="background:${GRAY_BG};font-weight:bold;">人員</td><td style="background:${GRAY_BG};font-weight:bold;">總休</td></tr>`;
+    S.staff.forEach(p => {
+      html += `<tr><td>${esc(p.name)}</td><td style="text-align:center;">${S.days - workDayCount(p)}</td></tr>`;
+    });
+
+    const doc = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="UTF-8">
 <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>班表</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
-<style>table{border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt;} th,td{border:1px solid #999999;padding:4px 6px;} th{background:#15212B;color:#ffffff;}</style>
+<style>table{border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt;} td{border:1px solid #999999;padding:3px 6px;}</style>
 </head>
-<body><table>${rows}</table></body></html>`;
-    downloadBlob('﻿'+html, 'application/vnd.ms-excel', `班表_${S.start}.xls`);
+<body><table>${html}</table></body></html>`;
+    downloadBlob('﻿'+doc, 'application/vnd.ms-excel', `班表_${S.start}.xls`);
   }
   function saveJSON(){
     downloadBlob(JSON.stringify(S, null, 2), 'application/json', `排班設定_${S.start}.json`);
