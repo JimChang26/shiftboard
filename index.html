@@ -330,30 +330,34 @@
       counts[staffId] = (counts[staffId]||0) + 1;
     }
 
+    // 先算出每個「某天某班別」的初始鬆緊度（可派人數 - 需求人數），越緊（可派人數越接近或低於需求）
+    // 的越優先處理，避免它需要的人被鬆的那天先用掉，導致明明湊得齊卻排不滿。
+    const units = [];
     for(let d=0; d<S.days; d++){
-      const filled = {};
-      S.shifts.forEach(sh => filled[sh.id]=0);
-      S.staff.forEach(p=>{
-        const sid = assign[K(d,p.id)];
-        if(sid) filled[sid] = (filled[sid]||0)+1;
-      });
+      for(const sh of S.shifts){
+        const slack = cands(sh, d, assign).length - sh.need;
+        units.push({d, sh, slack});
+      }
+    }
+    units.sort((a,b) => a.slack - b.slack);
 
-      const order = S.shifts.slice().sort((a,b) => cands(a,d,assign).length - cands(b,d,assign).length);
-      for(const sh of order){
-        let need = sh.need - (filled[sh.id]||0);
-        if(need<=0) continue;
-        let pool = cands(sh, d, assign);
-        pool = pool.map(p=>{
-          const bs = backStreak(p, d, assign);
-          const needsExtend = (bs>0 && bs<S.minConsecutive) ? 0 : 1;
-          return {p, needsExtend, c:counts[p.id], r:Math.random()};
-        }).sort((a,b)=> a.needsExtend-b.needsExtend || a.c-b.c || a.r-b.r)
-          .map(x=>x.p);
-        for(let i=0; i<pool.length && need>0; i++, need--){
-          const p = pool[i];
-          assign[K(d,p.id)] = sh.id;
-          counts[p.id]++;
-        }
+    for(const {d, sh} of units){
+      let filled = 0;
+      S.staff.forEach(p=>{ if(assign[K(d,p.id)]===sh.id) filled++; });
+      let need = sh.need - filled;
+      if(need<=0) continue;
+
+      let pool = cands(sh, d, assign);
+      pool = pool.map(p=>{
+        const bs = backStreak(p, d, assign);
+        const needsExtend = (bs>0 && bs<S.minConsecutive) ? 0 : 1;
+        return {p, needsExtend, c:counts[p.id], r:Math.random()};
+      }).sort((a,b)=> a.needsExtend-b.needsExtend || a.c-b.c || a.r-b.r)
+        .map(x=>x.p);
+      for(let i=0; i<pool.length && need>0; i++, need--){
+        const p = pool[i];
+        assign[K(d,p.id)] = sh.id;
+        counts[p.id]++;
       }
     }
 
