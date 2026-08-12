@@ -30,6 +30,8 @@
 
   main{ max-width:1200px; margin:0 auto; padding:0 1rem 3rem; }
 
+  #schedule{ margin-left:calc(-50vw + 50%); margin-right:calc(-50vw + 50%); padding-left:1rem; padding-right:1rem; }
+
   .card{ background:var(--paper-2); border:1px solid var(--line); border-radius:10px; padding:1rem; margin-bottom:1rem; }
   .card h2{ font-size:1.02rem; margin-bottom:.6em; }
   .basicFields{ display:flex; flex-wrap:wrap; gap:1rem 1.5rem; }
@@ -76,16 +78,16 @@
   .legend-note{ opacity:.65; }
 
   .tablewrap{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--paper-2); }
-  table.sched{ border-collapse:collapse; min-width:100%; }
-  table.sched th, table.sched td{ border:1px solid var(--line); padding:.3em .4em; text-align:center; white-space:nowrap; }
+  table.sched{ border-collapse:collapse; table-layout:fixed; width:100%; }
+  table.sched th, table.sched td{ border:1px solid var(--line); padding:.3em .15em; text-align:center; white-space:nowrap; overflow:hidden; }
   table.sched thead th{ position:sticky; top:0; background:var(--paper-2); z-index:3; }
-  table.sched th.staffcol, table.sched td.staffcol{ position:sticky; left:0; background:var(--paper-2); z-index:2; text-align:left; min-width:104px; }
+  table.sched th.staffcol, table.sched td.staffcol{ position:sticky; left:0; background:var(--paper-2); z-index:2; text-align:left; width:112px; padding-left:.4em; }
   table.sched thead th.staffcol{ z-index:4; }
   th.wk-weekend{ background:rgba(14,111,108,.08); }
   .dnum{ font-family:'Roboto Mono',monospace; font-weight:600; font-size:.85em; }
   .dwk{ font-size:.68em; opacity:.65; }
 
-  td.cell{ min-width:52px; cursor:pointer; position:relative; }
+  td.cell{ cursor:pointer; position:relative; }
   td.cell:empty:not(.off)::before{ content:'·'; opacity:.3; }
   td.cell.off{ background-image:repeating-linear-gradient(45deg, rgba(21,33,43,.09) 0 4px, transparent 4px 9px); }
   td.cell.bad{ box-shadow:inset 0 0 0 2px var(--alert); }
@@ -523,7 +525,7 @@
     $('#schedTable').innerHTML = `<thead>${theadRow1}${covRow}</thead><tbody>${bodyRows}</tbody>`;
 
     $('#legend').innerHTML = S.shifts.map(sh =>
-      `<span class="legend-item"><span class="swatch" style="background:${esc(sh.color)}"></span>${esc(sh.code)} ${esc(sh.name)}（${esc(sh.start)}–${esc(sh.end)}）</span>`
+      `<span class="legend-item"><span class="swatch" style="background:${esc(sh.color)}"></span>${esc(sh.code)} ${esc(sh.name)}</span>`
     ).join('') + `<span class="legend-item legend-note">斜線＝不可排日期　紅框＝排班問題　●＝手動鎖定</span>`;
 
     if(auditResult.list.length===0){

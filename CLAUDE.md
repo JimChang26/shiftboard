@@ -43,12 +43,11 @@ CLAUDE.md     ← 本檔
 - `--paper #E7ECEF` 底色、`--ink #15212B` 文字、`--accent #0E6F6C` 主色、`--alert #C63A28` 違規
 - 班別顏色由使用者自訂，目前僅單一日班，預設顏色 `#0E6F6C`（沿用主色）
 - 字型：標題與數字 Archivo，內文 Noto Sans TC，數據 Roboto Mono
-- 班表為橫向捲動的表格，人員欄與日期列都是 sticky，改版時要保住這個行為
+- 班表寬度固定撐滿容器（`table-layout:fixed`），日期欄位依天數平均壓縮，一般情況不需要橫向捲動；人員欄與日期列仍是 sticky，容器仍保留 `overflow-x:auto` 作為極端情況的保險
 - 不可排日期用斜線網底，違規格子用紅框，兩者不要換成純色底（會跟班別色打架）
 
 ## 品質底線
 
-- 手機可用：`index.html` 在 375px 寬要能操作，班表橫向捲動不能破版
 - 鍵盤可用：班表格子有 `tabindex`，Enter / Space 等同點擊，focus 樣式不要移除
 - 使用者輸入一律經過 `esc()` 再塞進 `innerHTML`
 - 尊重 `prefers-reduced-motion`
