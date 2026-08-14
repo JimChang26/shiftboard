@@ -237,6 +237,12 @@
     const [y,m] = ym.split('-').map(Number);
     return new Date(y, m, 0).getDate();
   }
+  function isWeekendDay(dayIdx){
+    const iso = addDays(S.start, dayIdx);
+    const [y,m,d] = iso.split('-').map(Number);
+    const dow = new Date(y, m-1, d).getDay();
+    return dow===0 || dow===6;
+  }
 
   // ---- 狀態 ----
   const STORAGE_KEY = 'shiftboard.state.v1';
@@ -347,12 +353,17 @@
       let need = sh.need - filled;
       if(need<=0) continue;
 
+      const weekend = isWeekendDay(d);
       let pool = cands(sh, d, assign);
       pool = pool.map(p=>{
         const bs = backStreak(p, d, assign);
         const needsExtend = (bs>0 && bs<S.minConsecutive) ? 0 : 1;
-        return {p, needsExtend, c:counts[p.id], r:Math.random()};
-      }).sort((a,b)=> a.needsExtend-b.needsExtend || a.c-b.c || a.r-b.r)
+        // 傾向延續原本就在上班的人，讓上班區塊連貫成一段，而不是東一天西一天
+        const momentum = bs>0 ? 0 : 1;
+        // 週六日優先排「本月已經休到較多次週末」的人上班，把休假機會留給還沒休到週末的人
+        const weekendPressure = weekend ? -weekendsOffCount(p, assign) : 0;
+        return {p, needsExtend, c:counts[p.id], weekendPressure, momentum, r:Math.random()};
+      }).sort((a,b)=> a.needsExtend-b.needsExtend || a.c-b.c || a.weekendPressure-b.weekendPressure || a.momentum-b.momentum || a.r-b.r)
         .map(x=>x.p);
       for(let i=0; i<pool.length && need>0; i++, need--){
         const p = pool[i];
@@ -391,7 +402,49 @@
       if(!moved) break;
     }
 
+    consolidateRestStreaks(assign, counts);
+
     return assign;
+  }
+
+  // 把孤立的單日休假盡量併成 2 天以上的連休：
+  // 找「前後都上班」的單日休假，跟鄰近那天上班的同事互換班，讓休假天數不變、只是排列方式更集中。
+  function consolidateRestStreaks(assign, counts){
+    if(S.minRestStreaks<=0) return;
+    for(const p of S.staff){
+      let guard = 0;
+      while(restStreakCount(p, assign) < S.minRestStreaks && guard++ < 20){
+        let extended = false;
+        for(let d=0; d<S.days && !extended; d++){
+          if(assign[K(d,p.id)]) continue;
+          const prevOff = d>0 && !assign[K(d-1,p.id)];
+          const nextOff = d<S.days-1 && !assign[K(d+1,p.id)];
+          if(prevOff || nextOff) continue; // 已經是 2 天以上連休，不需處理
+
+          for(const nd of [d-1, d+1]){
+            if(nd<0 || nd>=S.days) continue;
+            const kn = K(nd, p.id);
+            if(S.locked[kn]) continue;
+            const sid = assign[kn];
+            if(!sid) continue;
+            const temp = Object.assign({}, assign);
+            delete temp[kn];
+            const cover = S.staff.find(q =>
+              q.id!==p.id && !assign[K(nd,q.id)] && !S.locked[K(nd,q.id)] &&
+              check(q, nd, sid, temp).length===0
+            );
+            if(!cover) continue;
+            delete assign[kn];
+            assign[K(nd, cover.id)] = sid;
+            counts[p.id]--;
+            counts[cover.id] = (counts[cover.id]||0) + 1;
+            extended = true;
+            break;
+          }
+        }
+        if(!extended) break;
+      }
+    }
   }
 
   function scoreAssign(assign){
@@ -445,10 +498,11 @@
     return runs;
   }
 
-  function restStreakCount(p){
+  function restStreakCount(p, assign){
+    assign = assign || S.assign;
     let count=0, run=0;
     for(let d=0; d<S.days; d++){
-      if(S.assign[K(d,p.id)]){ if(run>=2) count++; run=0; }
+      if(assign[K(d,p.id)]){ if(run>=2) count++; run=0; }
       else run++;
     }
     if(run>=2) count++;
@@ -461,14 +515,15 @@
     return c;
   }
 
-  function weekendsOffCount(p){
+  function weekendsOffCount(p, assign){
+    assign = assign || S.assign;
     let count = 0;
     for(let d=0; d<S.days-1; d++){
       const iso = addDays(S.start, d);
       const [y,m,dd] = iso.split('-').map(Number);
       if(new Date(y, m-1, dd).getDay() !== 6) continue;
-      const satOff = !S.assign[K(d,p.id)];
-      const sunOff = !S.assign[K(d+1,p.id)];
+      const satOff = !assign[K(d,p.id)];
+      const sunOff = !assign[K(d+1,p.id)];
       if(satOff || sunOff) count++;
     }
     return count;
