@@ -274,6 +274,15 @@
     return back + 1 + fwd;
   }
 
+  // 連續上班的「軟上限」：比硬性上限（S.maxConsecutive）保守一點，
+  // 讓上班區塊多數落在這個長度內，避免每次都硬撐到上限才停，才能盡量平均分配、減少長連班。
+  function softConsecutiveCap(){
+    const softTarget = S.minConsecutive + 2;
+    return S.maxConsecutive>0
+      ? Math.max(S.minConsecutive, Math.min(S.maxConsecutive-1, softTarget))
+      : Math.max(S.minConsecutive, softTarget);
+  }
+
   function backStreak(p, dayIdx, assign){
     let run = 0, d = dayIdx-1;
     while(d>=0 && assign[K(d,p.id)]){ run++; d--; }
@@ -347,6 +356,8 @@
     }
     units.sort((a,b) => a.slack - b.slack);
 
+    const softCap = softConsecutiveCap();
+
     for(const {d, sh} of units){
       let filled = 0;
       S.staff.forEach(p=>{ if(assign[K(d,p.id)]===sh.id) filled++; });
@@ -358,12 +369,14 @@
       pool = pool.map(p=>{
         const bs = backStreak(p, d, assign);
         const needsExtend = (bs>0 && bs<S.minConsecutive) ? 0 : 1;
+        // 已經連上到軟上限的人，這天盡量排給別人，避免同一人一路連上到硬上限
+        const overSoftCap = (bs>=softCap) ? 1 : 0;
         // 傾向延續原本就在上班的人，讓上班區塊連貫成一段，而不是東一天西一天
         const momentum = bs>0 ? 0 : 1;
         // 週六日優先排「本月已經休到較多次週末」的人上班，把休假機會留給還沒休到週末的人
         const weekendPressure = weekend ? -weekendsOffCount(p, assign) : 0;
-        return {p, needsExtend, c:counts[p.id], weekendPressure, momentum, r:Math.random()};
-      }).sort((a,b)=> a.needsExtend-b.needsExtend || a.c-b.c || a.weekendPressure-b.weekendPressure || a.momentum-b.momentum || a.r-b.r)
+        return {p, needsExtend, overSoftCap, c:counts[p.id], weekendPressure, momentum, r:Math.random()};
+      }).sort((a,b)=> a.needsExtend-b.needsExtend || a.overSoftCap-b.overSoftCap || a.c-b.c || a.weekendPressure-b.weekendPressure || a.momentum-b.momentum || a.r-b.r)
         .map(x=>x.p);
       for(let i=0; i<pool.length && need>0; i++, need--){
         const p = pool[i];
@@ -465,8 +478,16 @@
       if(c>max) max=c;
     });
     const spread = S.staff.length ? (max-min) : 0;
+
+    // 連續上班超過「軟上限」的天數，累計扣分，讓搜尋優先挑選連班較短、較平均的結果
+    const softCap = softConsecutiveCap();
+    let longRunPenalty = 0;
+    S.staff.forEach(p=>{
+      workRuns(p).forEach(len => { if(len>softCap) longRunPenalty += (len-softCap); });
+    });
+
     S.assign = saved;
-    return violations*1000 + shortages*100 + staffIssues*10 + spread;
+    return violations*1000 + shortages*100 + staffIssues*10 + longRunPenalty*8 + spread;
   }
 
   function solve(){
